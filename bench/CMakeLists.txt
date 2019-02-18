@@ -3,15 +3,16 @@ set(BENCHMARK_ENABLE_TESTING OFF CACHE BOOL "Suppressing benchmark's tests" FORC
 add_subdirectory(benchmark)
 include_directories(benchmark/include)
 
-set(bench_cc
-  primes_bench.cc
+set(bench_cpp
+	dbphd_bench.cpp
+	postgres_bench.cpp
 )
 
-add_executable(bench_nemo ${bench_cc})
+add_executable(bench_dbphd ${bench_cpp})
 
-target_link_libraries(bench_nemo
+target_link_libraries(bench_dbphd
   benchmark
-  ${NEMO_LIB_NAME}
+  ${DBPHD_LIB_NAME}
   ${CMAKE_THREAD_LIBS_INIT}
   ${MATH_LIBS}
 )
