@@ -29,11 +29,68 @@ endif()
 
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake/Modules/")
 
+if((CMAKE_SIZEOF_VOID_P EQUAL 8) OR (CMAKE_CXX_COMPILER_ID MATCHES "SunPro"))
+  set(IS64BIT 1)
+  message("Generating 64bit code")
+else()
+  message("Generating 32bit code")
+endif()
+
+set(WITH_CONCPP $ENV{WITH_CONCPP} CACHE PATH
+  "MySQL Connector/C++ 8.0 install location"
+)
+
+set(CONCPP_INCLUDE_DIR $ENV{CONCPP_INCLUDE_DIR} CACHE PATH
+  "Location of Connector/C++ 8.0 headers"
+)
+
+set(CONCPP_LIB_DIR $ENV{CONCPP_LIB_DIR} CACHE PATH
+  "Location of Connector/C++ 8.0 libraries"
+)
+
+# Set include and library paths if not given
+
+if(WITH_CONCPP)
+  if(NOT CONCPP_INCLUDE_DIR)
+     set(CONCPP_INCLUDE_DIR "${WITH_CONCPP}/include")
+  endif()
+  if(NOT CONCPP_LIB_DIR)
+    if(IS64BIT)
+      set(CONCPP_LIB_DIR "${WITH_CONCPP}/lib64")
+    else()
+      set(CONCPP_LIB_DIR "${WITH_CONCPP}/lib")
+    endif()
+  endif()
+endif()
+
+if(NOT CONCPP_INCLUDE_DIR OR NOT CONCPP_LIB_DIR)
+  message(FATAL_ERROR
+    "This project requires MySQL Connector/C++ 8.0, please specify install location"
+    " using WITH_CONCPP setting or set header/library paths with CONCPP_INCLUDE_DIR"
+    " and CONCPP_LIB_DIR settings."
+  )
+endif()
+
+if(NOT EXISTS "${CONCPP_INCLUDE_DIR}/mysqlx/xdevapi.h")
+  message(FATAL_ERROR
+    "Could not find MySQL Connector/C++ 8.0 headers at specified"
+    " location: ${CONCPP_INCLUDE_DIR}"
+  )
+endif()
+
+set(CONCPP_LIBS
+	optimized mysqlcppconn8
+	)
+
+set(CONCPP_JDBC_LIBS
+	optimized mysqlcppconn
+	)
+
+
 find_package(Threads REQUIRED)
 find_package(Boost)
 find_package(Math)
 
-find_package(libmysqlcppconn)
 pkg_check_modules(PQXX libpqxx)
 pkg_check_modules(PQ libpq)
 pkg_check_modules(MONGOCXX libmongocxx)
