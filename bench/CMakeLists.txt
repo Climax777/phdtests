@@ -15,4 +15,5 @@ target_link_libraries(bench_dbphd
   ${DBPHD_LIB_NAME}
   ${CMAKE_THREAD_LIBS_INIT}
   ${MATH_LIBS}
+${PQXX_LDFLAGS} ${PQ_LDFLAGS} ${CONCPP_LIBS} ${MONGOCXX_LDFLAGS}
 )

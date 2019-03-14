@@ -9,6 +9,10 @@ endif()
 
 set( CMAKE_EXPORT_COMPILE_COMMANDS ON )
 set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -DDEBUG")
+#set (CMAKE_SKIP_BUILD_RPATH FALSE)
+#set (CMAKE_BUILD_WITH_INSTALL_RPATH FALSE)
+#set (CMAKE_INSTALL_RPATH "$CMAKE_INSTALL_RPREFIX")
+#set (CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
 
 find_package (PkgConfig REQUIRED)
 # Options can be turned on and off by providing cmake with a -DOPTIONNAME=ON (or OFF) argument.
@@ -79,12 +83,14 @@ if(NOT EXISTS "${CONCPP_INCLUDE_DIR}/mysqlx/xdevapi.h")
 endif()
 
 set(CONCPP_LIBS
-	optimized mysqlcppconn8
+	mysqlcppconn8
+	ssl
+	crypto
 	)
 
-set(CONCPP_JDBC_LIBS
-	optimized mysqlcppconn
-	)
+#set(CONCPP_JDBC_LIBS
+	#optimized mysqlcppconn
+	#)
 
 
 find_package(Threads REQUIRED)
@@ -95,9 +101,9 @@ pkg_check_modules(PQXX libpqxx)
 pkg_check_modules(PQ libpq)
 pkg_check_modules(MONGOCXX libmongocxx)
 
-include_directories(. include ${Boost_INCLUDE_DIRS} ${PQXX_INCLUDE_DIRS})
+include_directories(. include ${Boost_INCLUDE_DIRS} ${PQXX_INCLUDE_DIRS} ${CONCPP_INCLUDE_DIR} ${MONGOCXX_INCLUDE_DIRS})
 
-set(CMAKE_CXX_STANDARD 17) # cmake 3.1 supports '98', '11' or '14'. cmake 3.8 or later support '17'.
+set(CMAKE_CXX_STANDARD 17) # cmake 3.1 supports '" 98', '11' or '14'. cmake 3.8 or later support '17'.
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 if(DBPHD_SANITIZE)
@@ -133,4 +139,8 @@ message(STATUS "  Build tests          : ${DBPHD_TEST}")
 message(STATUS "  Build benchmarks     : ${DBPHD_BENCH}")
 message(STATUS "  Sanitize flags       : ${DBPHD_SANITIZE}")
 message(STATUS "  Boost include dirs   : ${Boost_INCLUDE_DIRS}")
+message(STATUS "  PostgreSQL include dirs   : ${PQXX_INCLUDE_DIRS}")
+message(STATUS "  PostgreSQL libs   : ${PQXX_LDFLAGS}" )
+message(STATUS "  Mysql include dirs   : ${CONCPP_INCLUDE_DIR}")
+message(STATUS "  Mysql lib   : ${CONCPP_LIB_DIR} ${CONCPP_LIBS}" )
 message(STATUS "")
