@@ -5,6 +5,9 @@ include_directories(./gtest/googletest/include)
 set(test_src
   run_all.cpp
   dbphd_test.cpp
+  dbphd_mysql_test.cpp
+  dbphd_mongo_test.cpp
+  dbphd_postgres_test.cpp
 )
 
 add_executable(test_dbphd ${test_src})

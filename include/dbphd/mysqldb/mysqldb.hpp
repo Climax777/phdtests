@@ -2,6 +2,7 @@
 #define MYSQLDB_HPP
 
 #include <memory>
+#include <optional>
 #include <mysqlx/xdevapi.h>
 
 /*using ::std::cout;
@@ -24,8 +25,11 @@ private:
 public:
 	MySQLDBHandler();
 	virtual ~MySQLDBHandler();
-
+	static std::optional<mysqlx::Client> Client;
 	static mysqlx::Session GetConnection(std::string connstr = "mysqlx://root:password@127.0.0.1");
+	static mysqlx::Schema CreateDatabase(mysqlx::Session& session, std::string dbname);
+	static bool DropDatabase(mysqlx::Session& session, std::string dbname);
+	static bool DropTable(mysqlx::Session& session, std::string dbname, std::string tablename);
 };
 
 #endif /* MYSQLDB_HPP */
