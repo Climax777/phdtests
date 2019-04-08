@@ -6,6 +6,7 @@ static void BM_Basic(benchmark::State& state) {
 	  dbphd::DBPHD dbphd;
   }
 }
+
 BENCHMARK(BM_Basic)->Iterations(2);
 
 BENCHMARK_MAIN();
