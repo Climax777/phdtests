@@ -61,7 +61,16 @@ static void BM_MONGO_Insert(benchmark::State& state) {
 		// This is the first thread, so do destruction here (delete documents etc..)
 	}
 
-	state.SetItemsProcessed(state.iterations()*state.range(0));
+	//state.SetItemsProcessed(state.iterations()*state.range(0));
+	// Set the counter as a rate. It will be presented divided
+	// by the duration of the benchmark.
+	// Meaning: per one second, how many 'foo's are processed?
+	state.counters["Ops"] = benchmark::Counter(state.iterations()*state.range(0), benchmark::Counter::kIsRate);
+
+	// Set the counter as a rate. It will be presented divided
+	// by the duration of the benchmark, and the result inverted.
+	// Meaning: how many seconds it takes to process one 'foo'?
+	state.counters["OpsInv"] = benchmark::Counter(state.iterations()*state.range(0), benchmark::Counter::kIsRate | benchmark::Counter::kInvert);
 	state.counters.insert({{"Documents", benchmark::Counter(state.range(0), benchmark::Counter::kAvgThreads)}, {"Fields", benchmark::Counter(state.range(1), benchmark::Counter::kAvgThreads)}, {"Indexes", benchmark::Counter(state.range(2), benchmark::Counter::kAvgThreads)}});
 }
 
@@ -109,7 +118,16 @@ static void BM_MONGO_InsertTransact(benchmark::State& state) {
 		// This is the first thread, so do destruction here (delete documents etc..)
 	}
 
-	state.SetItemsProcessed(state.iterations()*state.range(0));
+//	state.SetItemsProcessed(state.iterations()*state.range(0));
+	// Set the counter as a rate. It will be presented divided
+	// by the duration of the benchmark.
+	// Meaning: per one second, how many 'foo's are processed?
+	state.counters["Ops"] = benchmark::Counter(state.iterations()*state.range(0), benchmark::Counter::kIsRate);
+
+	// Set the counter as a rate. It will be presented divided
+	// by the duration of the benchmark, and the result inverted.
+	// Meaning: how many seconds it takes to process one 'foo'?
+	state.counters["OpsInv"] = benchmark::Counter(state.iterations()*state.range(0), benchmark::Counter::kIsRate | benchmark::Counter::kInvert);
 	state.counters.insert({{"Documents", benchmark::Counter(state.range(0), benchmark::Counter::kAvgThreads)}, {"Fields", benchmark::Counter(state.range(1), benchmark::Counter::kAvgThreads)}, {"Indexes", benchmark::Counter(state.range(2), benchmark::Counter::kAvgThreads)}});
 }
 

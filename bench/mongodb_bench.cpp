@@ -15,7 +15,7 @@ static void BM_MONGO_Select(benchmark::State& state) {
 	}
 }
 
-BENCHMARK(BM_MONGO_Select);
+//BENCHMARK(BM_MONGO_Select);
 
 static void BM_MONGO_SelectTransact(benchmark::State& state) {
 	auto conn = MongoDBHandler::GetConnection();
@@ -32,4 +32,4 @@ static void BM_MONGO_SelectTransact(benchmark::State& state) {
 	}
 }
 
-BENCHMARK(BM_MONGO_SelectTransact);
+//BENCHMARK(BM_MONGO_SelectTransact);

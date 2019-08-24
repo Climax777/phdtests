@@ -7,6 +7,6 @@ static void BM_Basic(benchmark::State& state) {
   }
 }
 
-BENCHMARK(BM_Basic)->Iterations(2);
+//BENCHMARK(BM_Basic)->Iterations(2);
 
 BENCHMARK_MAIN();

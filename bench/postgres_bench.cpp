@@ -10,7 +10,7 @@ static void BM_PQXX_Select(benchmark::State& state) {
 	  }
 }
 
-BENCHMARK(BM_PQXX_Select);
+//BENCHMARK(BM_PQXX_Select);
 
 static void BM_PQXX_SelectTransact(benchmark::State& state) {
 	auto conn = PostgreSQLDBHandler::GetConnection();
@@ -28,4 +28,4 @@ static void BM_PQXX_SelectTransact(benchmark::State& state) {
 	  }
 }
 
-BENCHMARK(BM_PQXX_SelectTransact);
+//BENCHMARK(BM_PQXX_SelectTransact);
