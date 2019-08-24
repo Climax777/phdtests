@@ -113,6 +113,7 @@ find_package(Math)
 pkg_check_modules(PQXX libpqxx)
 pkg_check_modules(PQ libpq)
 pkg_check_modules(MONGOCXX libmongocxx)
+pkg_check_modules(BSONCXX libbsoncxx)
 
 include_directories(. include ${Boost_INCLUDE_DIRS} ${PQXX_INCLUDE_DIRS} ${CONCPP_INCLUDE_DIR} ${MONGOCXX_INCLUDE_DIRS})
 
