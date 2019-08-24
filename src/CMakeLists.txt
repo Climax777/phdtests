@@ -6,7 +6,7 @@ set(dbphd_src
 	mysqldb/mysqldb.cpp
 	postgresql/postgresql.cpp
 )
-
+message(STATUS "BSONCXX: ${BSONCXX_INCLUDE_DIRS}")
 # Compile the library
 add_library(${DBPHD_LIB_NAME} ${DBPHD_LIB_TYPE} ${dbphd_src})
 target_include_directories(${DBPHD_LIB_NAME} PUBLIC include ${DBPHD_LIB_NAME} ${CMAKE_THREAD_LIBS_INIT} ${MATH_LIBS} ${PQXX_INCLUDE_DIRS} ${CONCPP_INCLUDE_DIR} ${MONGOCXX_INCLUDE_DIRS} ${BSONCXX_INCLUDE_DIRS})
