@@ -10,7 +10,7 @@ static void BM_MYSQL_Select(benchmark::State& state) {
 	}
 }
 
-BENCHMARK(BM_MYSQL_Select);
+//BENCHMARK(BM_MYSQL_Select);
 
 static void BM_MYSQL_SelectTransact(benchmark::State& state) {
 	auto conn = MySQLDBHandler::GetConnection();	
@@ -23,4 +23,4 @@ static void BM_MYSQL_SelectTransact(benchmark::State& state) {
 	}
 }
 
-BENCHMARK(BM_MYSQL_SelectTransact);
+//BENCHMARK(BM_MYSQL_SelectTransact);
