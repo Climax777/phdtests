@@ -84,7 +84,7 @@ CREATE TABLE create_bench (
 	state.counters.insert({{"Documents", benchmark::Counter(state.range(0), benchmark::Counter::kAvgThreads)}, {"Fields", benchmark::Counter(state.range(1), benchmark::Counter::kAvgThreads)}, {"Indexes", benchmark::Counter(state.range(2), benchmark::Counter::kAvgThreads)}});
 }
 
-BENCHMARK(BM_MYSQL_Insert)->Apply(CustomArgumentsInserts)->UseRealTime()->Complexity()->ThreadRange(1,4);
+BENCHMARK(BM_MYSQL_Insert)->Apply(CustomArgumentsInserts)->Complexity()->DenseThreadRange(1,4);
 
 static void BM_MYSQL_InsertTransact(benchmark::State& state) {
 	auto conn = MySQLDBHandler::GetConnection();	
@@ -153,7 +153,7 @@ CREATE TABLE create_bench (
 	state.counters.insert({{"Documents", benchmark::Counter(state.range(0), benchmark::Counter::kAvgThreads)}, {"Fields", benchmark::Counter(state.range(1), benchmark::Counter::kAvgThreads)}, {"Indexes", benchmark::Counter(state.range(2), benchmark::Counter::kAvgThreads)}});
 }
 
-BENCHMARK(BM_MYSQL_InsertTransact)->Apply(CustomArgumentsInserts)->UseRealTime()->Complexity()->ThreadRange(1,4);
+BENCHMARK(BM_MYSQL_InsertTransact)->Apply(CustomArgumentsInserts)->Complexity()->DenseThreadRange(1,4);
 /*
 static void BM_MYSQL_SelectTransact(benchmark::State& state) {
 	auto conn = MySQLDBHandler::GetConnection();	
