@@ -3,6 +3,12 @@
 #include <random>
 #include <string>
 
+// Insert tests simply tests insert performance based on:
+// *	Number of fields
+// *	Number of indexes
+// *	Transaction/non-transaction
+// *	Number of threads (concurrency)
+
 using namespace std;
 using bsoncxx::builder::basic::kvp;
 using bsoncxx::builder::basic::make_document;
@@ -33,7 +39,7 @@ static void BM_MONGO_Insert(benchmark::State& state) {
 	if(state.thread_index == 0) {
 		// This is the first thread, so do initialization here, build indexes etc...
 		collection.drop();
-		collection.create_index(make_document(kvp("_id", 1)));
+		collection.create_index(make_document(kvp("_id", 1))); // This creates the collection too
 		if(state.range(2) > 0) {
 			for(int index = 0; index < state.range(2); ++index) {
 				collection.create_index(make_document(kvp(("a" + to_string(index)), 1)));
@@ -132,19 +138,3 @@ static void BM_MONGO_InsertTransact(benchmark::State& state) {
 }
 
 BENCHMARK(BM_MONGO_InsertTransact)->Apply(CustomArgumentsInserts)->Complexity()->DenseThreadRange(1,4);
-/*static void BM_MONGO_SelectTransact(benchmark::State& state) {
-	auto conn = MongoDBHandler::GetConnection();
-	auto db = conn->database("bench");
-	auto collection = db.collection("select_bench");
-	mongocxx::pipeline stages;
-	stages.limit(1);
-	stages.project(make_document(kvp("_id", 0), kvp("result", make_document(kvp("$literal", 500)))));
-	auto session = conn->start_session();
-	for(auto _ : state) {
-		session.start_transaction();
-		auto cursor = collection.aggregate(stages);
-		session.commit_transaction();
-	}
-}
-
-BENCHMARK(BM_MONGO_SelectTransact);*/
