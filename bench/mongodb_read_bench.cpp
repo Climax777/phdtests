@@ -109,15 +109,17 @@ static void BM_MONGO_Read_Count(benchmark::State& state) {
 		// TODO Figure out way to kill collection after all tests of suite is done
 	}
 
+	state.SetItemsProcessed(pow(10,5)*state.iterations());
+
 	// Set the counter as a rate. It will be presented divided
 	// by the duration of the benchmark.
 	// Meaning: per one second, how many 'foo's are processed?
-	state.counters["Ops"] = benchmark::Counter(state.iterations()*pow(10,5), benchmark::Counter::kIsRate);
+	state.counters["Ops"] = benchmark::Counter(state.iterations(), benchmark::Counter::kIsRate);
 
 	// Set the counter as a rate. It will be presented divided
 	// by the duration of the benchmark, and the result inverted.
 	// Meaning: how many seconds it takes to process one 'foo'?
-	state.counters["OpsInv"] = benchmark::Counter(state.iterations()*pow(10,5), benchmark::Counter::kIsRate | benchmark::Counter::kInvert);
+	state.counters["OpsInv"] = benchmark::Counter(state.iterations(), benchmark::Counter::kIsRate | benchmark::Counter::kInvert);
 	state.counters.insert({{"Fields", benchmark::Counter(state.range(0), benchmark::Counter::kAvgThreads)}, {"Indexes", benchmark::Counter(state.range(1), benchmark::Counter::kAvgThreads)}});
 }
 
@@ -169,16 +171,17 @@ static void BM_MONGO_Read_Count_Transact(benchmark::State& state) {
 		// TODO Figure out way to kill collection after all tests of suite is done
 	}
 
+	state.SetItemsProcessed(pow(10,5)*state.iterations()); // TODO check assumption
 
 	// Set the counter as a rate. It will be presented divided
 	// by the duration of the benchmark.
 	// Meaning: per one second, how many 'foo's are processed?
-	state.counters["Ops"] = benchmark::Counter(state.iterations()*pow(10,5), benchmark::Counter::kIsRate);
+	state.counters["Ops"] = benchmark::Counter(state.iterations(), benchmark::Counter::kIsRate);
 
 	// Set the counter as a rate. It will be presented divided
 	// by the duration of the benchmark, and the result inverted.
 	// Meaning: how many seconds it takes to process one 'foo'?
-	state.counters["OpsInv"] = benchmark::Counter(state.iterations()*pow(10,5), benchmark::Counter::kIsRate | benchmark::Counter::kInvert);
+	state.counters["OpsInv"] = benchmark::Counter(state.iterations(), benchmark::Counter::kIsRate | benchmark::Counter::kInvert);
 	state.counters.insert({{"Fields", benchmark::Counter(state.range(0), benchmark::Counter::kAvgThreads)}, {"Indexes", benchmark::Counter(state.range(1), benchmark::Counter::kAvgThreads)}});
 }
 
