@@ -38,7 +38,6 @@ static void CustomArgumentsInserts2(benchmark::internal::Benchmark* b) {
 static void CreateCollection(mongocxx::pool::entry& conn) {
 	static volatile bool created = false;
 	if(!created) {
-		cout<< "Creating collection" << endl;
 		auto db = conn->database("bench");
 		auto collection = db.collection("read_bench");
 
@@ -55,10 +54,8 @@ static void CreateCollection(mongocxx::pool::entry& conn) {
 				int iteration = i+j;
 				for(int f = 0; f < 5; ++f) {
 					doc << ("a" + to_string(f)) << to_string(values[iteration%10]);
-					cout<< values[iteration%10] << ",";
 					iteration /= 10;
 				}
-				cout << endl;
 
 				documents.push_back(doc << bsoncxx::builder::stream::finalize);
 			}
@@ -94,7 +91,6 @@ static void BM_MONGO_Read_Count(benchmark::State& state) {
 			collection.create_index(idx << bsoncxx::builder::stream::finalize, index_options);
 		}
 	}
-	uint64_t count = 0;
 	for(auto _ : state) {
 		state.PauseTiming();
 		auto builder = bsoncxx::builder::stream::document{};
@@ -104,7 +100,7 @@ static void BM_MONGO_Read_Count(benchmark::State& state) {
 		}
 
 		state.ResumeTiming();
-		count += collection.count_documents(doc << bsoncxx::builder::stream::finalize);
+		collection.count_documents(doc << bsoncxx::builder::stream::finalize);
 	}
 
 	if(state.thread_index == 0) {
@@ -116,12 +112,12 @@ static void BM_MONGO_Read_Count(benchmark::State& state) {
 	// Set the counter as a rate. It will be presented divided
 	// by the duration of the benchmark.
 	// Meaning: per one second, how many 'foo's are processed?
-	state.counters["Ops"] = benchmark::Counter(count, benchmark::Counter::kIsRate);
+	state.counters["Ops"] = benchmark::Counter(state.iterations()*pow(10,5), benchmark::Counter::kIsRate);
 
 	// Set the counter as a rate. It will be presented divided
 	// by the duration of the benchmark, and the result inverted.
 	// Meaning: how many seconds it takes to process one 'foo'?
-	state.counters["OpsInv"] = benchmark::Counter(state.iterations()*state.range(0), benchmark::Counter::kIsRate | benchmark::Counter::kInvert);
+	state.counters["OpsInv"] = benchmark::Counter(state.iterations()*pow(10,5), benchmark::Counter::kIsRate | benchmark::Counter::kInvert);
 	state.counters.insert({{"Fields", benchmark::Counter(state.range(0), benchmark::Counter::kAvgThreads)}, {"Indexes", benchmark::Counter(state.range(1), benchmark::Counter::kAvgThreads)}});
 }
 
@@ -152,7 +148,6 @@ static void BM_MONGO_Read_Count_Transact(benchmark::State& state) {
 			collection.create_index(idx << bsoncxx::builder::stream::finalize, index_options);
 		}
 	}
-	uint64_t count = 0;
 	auto session = conn->start_session();
 	for(auto _ : state) {
 		state.PauseTiming();
@@ -164,7 +159,7 @@ static void BM_MONGO_Read_Count_Transact(benchmark::State& state) {
 
 		state.ResumeTiming();
 		session.start_transaction();
-		count += collection.count_documents(doc << bsoncxx::builder::stream::finalize);
+		collection.count_documents(doc << bsoncxx::builder::stream::finalize);
 		session.commit_transaction();
 	}
 
@@ -178,12 +173,12 @@ static void BM_MONGO_Read_Count_Transact(benchmark::State& state) {
 	// Set the counter as a rate. It will be presented divided
 	// by the duration of the benchmark.
 	// Meaning: per one second, how many 'foo's are processed?
-	state.counters["Ops"] = benchmark::Counter(count, benchmark::Counter::kIsRate);
+	state.counters["Ops"] = benchmark::Counter(state.iterations()*pow(10,5), benchmark::Counter::kIsRate);
 
 	// Set the counter as a rate. It will be presented divided
 	// by the duration of the benchmark, and the result inverted.
 	// Meaning: how many seconds it takes to process one 'foo'?
-	state.counters["OpsInv"] = benchmark::Counter(state.iterations()*state.range(0), benchmark::Counter::kIsRate | benchmark::Counter::kInvert);
+	state.counters["OpsInv"] = benchmark::Counter(state.iterations()*pow(10,5), benchmark::Counter::kIsRate | benchmark::Counter::kInvert);
 	state.counters.insert({{"Fields", benchmark::Counter(state.range(0), benchmark::Counter::kAvgThreads)}, {"Indexes", benchmark::Counter(state.range(1), benchmark::Counter::kAvgThreads)}});
 }
 
