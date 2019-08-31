@@ -51,7 +51,7 @@ static void BM_MONGO_Insert(benchmark::State& state) {
 		std::vector<bsoncxx::document::value> documents;
 		for(int n = 0; n < state.range(0); ++n) {
 			auto builder = bsoncxx::builder::stream::document{};
-			auto doc = builder << "a0" << dis(gen);
+			auto doc = builder << "a0" << to_string(dis(gen));
 			for(int fields = 1; fields < state.range(1); ++fields) {
 				doc << ("a" + to_string(fields)) << to_string(dis(gen));
 			}
@@ -106,7 +106,7 @@ static void BM_MONGO_InsertTransact(benchmark::State& state) {
 		std::vector<bsoncxx::document::value> documents;
 		for(int n = 0; n < state.range(0); ++n) {
 			auto builder = bsoncxx::builder::stream::document{};
-			auto doc = builder << "a0" << dis(gen);
+			auto doc = builder << "a0" << to_string(dis(gen));
 			for(int fields = 1; fields < state.range(1); ++fields) {
 				doc << ("a" + to_string(fields)) << to_string(dis(gen));
 			}
