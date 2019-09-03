@@ -7,27 +7,19 @@
 
 // Read tests read performance based on:
 // *	Number of fields in query
-// *	Number of indexes used (compounded)
+// *	Number of indexes used (compounded) scan vs indexed basically
 // *	Number of fields returned per document
 // *	Range queries 
 // *	Skip, sort, limit
+// *	Simple aggregations: avg, sum, min, max, *2
 // *	Transaction/non-transaction
 // *	Number of threads (concurrency)
-// *	Simple aggregations: avg, sum, min, max, *2
 
 using namespace std;
 using bsoncxx::builder::basic::kvp;
 using bsoncxx::builder::basic::make_document;
 
 static void CustomArgumentsInserts(benchmark::internal::Benchmark* b) {
-	for (int i = 1; i <= 5; ++i) { // fields to query
-		for (int j = 0; j <= i; ++j) { //  Indexes
-			b->Args({i, j});
-		}
-	}
-}
-
-static void CustomArgumentsInserts2(benchmark::internal::Benchmark* b) {
 	for (int i = 1; i <= 5; ++i) { // fields to query
 		for (int j = 0; j <= i; ++j) { //  Indexes
 			b->Args({i, j});
@@ -46,14 +38,14 @@ static void CreateCollection(mongocxx::pool::entry& conn) {
 		collection.create_index(make_document(kvp("_id", 1)));
 
 		int values[] = {0,1,2,3,4,5,6,7,8,9};
-		for(int i = 0; i < pow(10,5); i += 150) {
+		for(int i = 0; i < pow(10,5); i += 100) {
 			std::vector<bsoncxx::document::value> documents;
-			for(int j = 0; j < 150 && i+j < pow(10,5);++j) {
+			for(int j = 0; j < 100 && i+j < pow(10,5);++j) {
 				auto builder = bsoncxx::builder::stream::document{};
 				auto doc = builder << "_id" << j+i;
 				int iteration = i+j;
 				for(int f = 0; f < 5; ++f) {
-					doc << ("a" + to_string(f)) << to_string(values[iteration%10]);
+					doc << ("a" + to_string(f)) << values[iteration%10];
 					iteration /= 10;
 				}
 
@@ -91,16 +83,16 @@ static void BM_MONGO_Read_Count(benchmark::State& state) {
 			collection.create_index(idx << bsoncxx::builder::stream::finalize, index_options);
 		}
 	}
+	auto session = conn->start_session();
 	for(auto _ : state) {
 		state.PauseTiming();
 		auto builder = bsoncxx::builder::stream::document{};
-		auto doc = builder << "a0" << to_string(dis(gen));
+		auto doc = builder << "a0" << dis(gen);
 		for(int n = 1; n < state.range(0); ++n) {
-			doc << ("a" + to_string(n)) << to_string(dis(gen));
+			doc << ("a" + to_string(n)) << dis(gen);
 		}
-
 		state.ResumeTiming();
-		collection.count_documents(doc << bsoncxx::builder::stream::finalize);
+		collection.count_documents(session, doc << bsoncxx::builder::stream::finalize);
 	}
 
 	if(state.thread_index == 0) {
@@ -154,14 +146,14 @@ static void BM_MONGO_Read_Count_Transact(benchmark::State& state) {
 	for(auto _ : state) {
 		state.PauseTiming();
 		auto builder = bsoncxx::builder::stream::document{};
-		auto doc = builder << "a0" << to_string(dis(gen));
+		auto doc = builder << "a0" << dis(gen);
 		for(int n = 1; n < state.range(0); ++n) {
-			doc << ("a" + to_string(n)) << to_string(dis(gen));
+			doc << ("a" + to_string(n)) << dis(gen);
 		}
 
 		state.ResumeTiming();
 		session.start_transaction();
-		collection.count_documents(doc << bsoncxx::builder::stream::finalize);
+		collection.count_documents(session, doc << bsoncxx::builder::stream::finalize);
 		session.commit_transaction();
 	}
 

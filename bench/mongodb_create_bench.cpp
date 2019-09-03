@@ -46,6 +46,7 @@ static void BM_MONGO_Insert(benchmark::State& state) {
 			}
 		}
 	}
+	auto session = conn->start_session();
 	for(auto _ : state) {
 		state.PauseTiming();
 		std::vector<bsoncxx::document::value> documents;
@@ -53,13 +54,13 @@ static void BM_MONGO_Insert(benchmark::State& state) {
 			auto builder = bsoncxx::builder::stream::document{};
 			auto doc = builder << "a0" << to_string(dis(gen));
 			for(int fields = 1; fields < state.range(1); ++fields) {
-				doc << ("a" + to_string(fields)) << to_string(dis(gen));
+				doc << ("a" + to_string(fields)) << dis(gen);
 			}
 
 			documents.push_back(doc << bsoncxx::builder::stream::finalize);
 		}
 		state.ResumeTiming();
-		collection.insert_many(documents);
+		collection.insert_many(session, documents);
 	}
 
 	if(state.thread_index == 0) {
@@ -108,14 +109,14 @@ static void BM_MONGO_InsertTransact(benchmark::State& state) {
 			auto builder = bsoncxx::builder::stream::document{};
 			auto doc = builder << "a0" << to_string(dis(gen));
 			for(int fields = 1; fields < state.range(1); ++fields) {
-				doc << ("a" + to_string(fields)) << to_string(dis(gen));
+				doc << ("a" + to_string(fields)) << dis(gen);
 			}
 
 			documents.push_back(doc << bsoncxx::builder::stream::finalize);
 		}
 		state.ResumeTiming();
 		session.start_transaction();
-		collection.insert_many(documents);
+		collection.insert_many(session, documents);
 		session.commit_transaction();
 	}
 
