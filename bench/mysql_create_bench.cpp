@@ -154,16 +154,3 @@ CREATE TABLE create_bench (
 }
 
 BENCHMARK(BM_MYSQL_InsertTransact)->Apply(CustomArgumentsInserts)->Complexity()->DenseThreadRange(1,4);
-/*
-static void BM_MYSQL_SelectTransact(benchmark::State& state) {
-	auto conn = MySQLDBHandler::GetConnection();	
-	const std::string query = "select 500";
-	for(auto _ : state) {
-		conn.startTransaction();
-		auto querystatement = conn.sql(query);
-		auto result = querystatement.execute();
-		conn.commit();
-	}
-}
-
-BENCHMARK(BM_MYSQL_SelectTransact);*/

@@ -151,7 +151,7 @@ CREATE TABLE create_bench (
 		}
 		state.ResumeTiming();
 		pqxx::work w(*conn);
-		w.exec0(query);
+		w.exec(query);
 		w.commit();
 	}
 
