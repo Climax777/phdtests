@@ -119,7 +119,10 @@ static void BM_MYSQL_Read_CountTransact(benchmark::State& state) {
 	if(state.thread_index == 0) {
 		// This is the first thread, so do initialization here, build indexes etc...
 		CreateTable(conn);
-		conn.sql("DROP INDEX idx ON bench.read_bench;").execute();
+		try {
+			conn.sql("DROP INDEX idx ON bench.read_bench;").execute();
+		}catch(...) {
+		}
 		if(state.range(1) > 0) {
 			string indexCreate = "CREATE INDEX idx on bench.read_bench (a0";
 			for(int index = 1; index < state.range(1); ++index) {
