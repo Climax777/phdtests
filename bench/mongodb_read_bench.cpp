@@ -6,10 +6,11 @@
 #include <algorithm>
 
 // Read tests read performance based on:
-// *	Number of fields in query
-// *	Number of indexes used (compounded) scan vs indexed basically
+// *	Number of fields in query Done
+// *	Number of indexes used (compounded scan vs indexed basically) Done
 // *	Number of fields returned per document
 // *	Range queries 
+// *	Join?
 // *	Skip, sort, limit
 // *	Simple aggregations: avg, sum, min, max, *2
 // *	Transaction/non-transaction
@@ -23,6 +24,16 @@ static void CustomArgumentsInserts(benchmark::internal::Benchmark* b) {
 	for (int i = 1; i <= 5; ++i) { // fields to query
 		for (int j = 0; j <= i; ++j) { //  Indexes
 			b->Args({i, j});
+		}
+	}
+}
+
+static void CustomArgumentsInserts2(benchmark::internal::Benchmark* b) {
+	for (int i = 1; i <= 5; ++i) { // documents to return
+		for (int j = 1; j <= 5; ++j) { // fields to query
+			for (int k = 0; k <= 5; ++k) { //  fields to return
+				b->Args({i, j, k});
+			}
 		}
 	}
 }
