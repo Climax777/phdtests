@@ -86,7 +86,7 @@ CREATE TABLE create_bench (
 
 BENCHMARK(BM_MYSQL_Insert)->Apply(CustomArgumentsInserts)->Complexity()->DenseThreadRange(1,4);
 
-static void BM_MYSQL_InsertTransact(benchmark::State& state) {
+static void BM_MYSQL_Insert_Transact(benchmark::State& state) {
 	auto conn = MySQLDBHandler::GetConnection();	
 	std::random_device rd;  //Will be used to obtain a seed for the random number engine
 	std::mt19937 gen(rd()); //Standard mersenne_twister_engine seeded with rd()
@@ -153,4 +153,4 @@ CREATE TABLE create_bench (
 	state.counters.insert({{"Documents", benchmark::Counter(state.range(0), benchmark::Counter::kAvgThreads)}, {"Fields", benchmark::Counter(state.range(1), benchmark::Counter::kAvgThreads)}, {"Indexes", benchmark::Counter(state.range(2), benchmark::Counter::kAvgThreads)}});
 }
 
-BENCHMARK(BM_MYSQL_InsertTransact)->Apply(CustomArgumentsInserts)->Complexity()->DenseThreadRange(1,4);
+BENCHMARK(BM_MYSQL_Insert_Transact)->Apply(CustomArgumentsInserts)->Complexity()->DenseThreadRange(1,4);
