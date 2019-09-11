@@ -8,13 +8,13 @@
 // Read tests read performance based on:
 // *	Number of fields in query Done
 // *	Number of indexes used (compounded scan vs indexed basically) Done
-// *	Number of fields returned per document
-// *	Range queries 
-// *	Join?
-// *	Skip, sort, limit
-// *	Simple aggregations: avg, sum, min, max, *2
-// *	Transaction/non-transaction
-// *	Number of threads (concurrency)
+// *	Number of fields returned per document Done
+// *	limit Done
+// *	Simple aggregations: avg, sum, *2 Done
+// *	Skip Not really more impactful than just returning the document
+// *	sort // ??????
+// *	Range queries // This is implicitly the same as fixing one and leaving the rest of the columns >= 0 ???
+// *	Join ?
 
 using namespace std;
 using bsoncxx::builder::basic::kvp;
@@ -32,11 +32,17 @@ static void CustomArgumentsInserts2(benchmark::internal::Benchmark* b) {
 	for (int i = 1; i <= 5; ++i) { // fields to query
 		for (int j = 0; j <= 5; ++j) { // fields to return
 			for (int k = 0; k <= i; ++k) { //  Indexes
-				for(int l = 1; l <= max(1, (int)pow(10,5-i)); l *= 4) { // Documents to return
+				for(int l = 1; l <= max(1, (int)pow(10,5-i)); l *= 2) { // Documents to return
 					b->Args({i, j, k, l});
 				}
 			}
 		}
+	}
+}
+
+static void CustomArgumentsInserts3(benchmark::internal::Benchmark* b) {
+	for (int i = 1; i <= pow(10,5); i *= 2) { // documents to process
+		b->Args({i});
 	}
 }
 
@@ -97,6 +103,7 @@ static void BM_MONGO_Read_Count(benchmark::State& state) {
 		}
 	}
 	auto session = conn->start_session();
+	uint64_t count = 0;
 	for(auto _ : state) {
 		state.PauseTiming();
 		auto builder = bsoncxx::builder::stream::document{};
@@ -105,7 +112,7 @@ static void BM_MONGO_Read_Count(benchmark::State& state) {
 			doc << ("a" + to_string(n)) << dis(gen);
 		}
 		state.ResumeTiming();
-		collection.count_documents(session, doc << bsoncxx::builder::stream::finalize);
+		count += collection.count_documents(session, doc << bsoncxx::builder::stream::finalize);
 	}
 
 	if(state.thread_index == 0) {
@@ -114,7 +121,7 @@ static void BM_MONGO_Read_Count(benchmark::State& state) {
 		// TODO Figure out way to kill collection after all tests of suite is done
 	}
 
-	state.SetItemsProcessed(pow(10,5)*state.iterations());
+	state.SetItemsProcessed(count);
 
 	// Set the counter as a rate. It will be presented divided
 	// by the duration of the benchmark.
@@ -156,6 +163,7 @@ static void BM_MONGO_Read_Count_Transact(benchmark::State& state) {
 		}
 	}
 	auto session = conn->start_session();
+	uint64_t count = 0;
 	for(auto _ : state) {
 		state.PauseTiming();
 		auto builder = bsoncxx::builder::stream::document{};
@@ -166,7 +174,7 @@ static void BM_MONGO_Read_Count_Transact(benchmark::State& state) {
 
 		state.ResumeTiming();
 		session.start_transaction();
-		collection.count_documents(session, doc << bsoncxx::builder::stream::finalize);
+		count += collection.count_documents(session, doc << bsoncxx::builder::stream::finalize);
 		session.commit_transaction();
 	}
 
@@ -176,7 +184,7 @@ static void BM_MONGO_Read_Count_Transact(benchmark::State& state) {
 		// TODO Figure out way to kill collection after all tests of suite is done
 	}
 
-	state.SetItemsProcessed(pow(10,5)*state.iterations()); // TODO check assumption
+	state.SetItemsProcessed(count); // TODO check assumption
 
 	// Set the counter as a rate. It will be presented divided
 	// by the duration of the benchmark.
@@ -192,7 +200,6 @@ static void BM_MONGO_Read_Count_Transact(benchmark::State& state) {
 
 BENCHMARK(BM_MONGO_Read_Count_Transact)->Apply(CustomArgumentsInserts)->Complexity()->DenseThreadRange(1,4);
 
-// This does not test #docs returned
 static void BM_MONGO_Reads(benchmark::State& state) {
 	auto conn = MongoDBHandler::GetConnection();
 	auto db = conn->database("bench");
@@ -341,3 +348,301 @@ static void BM_MONGO_Reads_Transact(benchmark::State& state) {
 }
 
 BENCHMARK(BM_MONGO_Reads_Transact)->Apply(CustomArgumentsInserts2)->Complexity()->DenseThreadRange(1,4);
+
+
+static void BM_MONGO_Read_Sum(benchmark::State& state) {
+	auto conn = MongoDBHandler::GetConnection();
+	auto db = conn->database("bench");
+	auto collection = db.collection("read_bench");
+	std::random_device rd;  //Will be used to obtain a seed for the random number engine
+	std::mt19937 gen(rd()); //Standard mersenne_twister_engine seeded with rd()
+	std::uniform_int_distribution<> dis(0, 4);
+	// Per thread settings...
+	if(state.thread_index == 0) {
+		// This is the first thread, so do initialization here, build indexes etc...
+		CreateCollection(conn);
+		collection = db.collection("read_bench");
+		collection.indexes().drop_all();
+	}
+	auto session = conn->start_session();
+	for(auto _ : state) {
+		state.PauseTiming();
+		mongocxx::pipeline pipe;
+		pipe.limit(state.range(0));
+		pipe.group(bsoncxx::builder::stream::document{} << "_id"  << 1 << "count" << bsoncxx::builder::stream::open_document << "$sum" << "$a0" <<  bsoncxx::builder::stream::close_document << bsoncxx::builder::stream::finalize);
+		state.ResumeTiming();
+		auto result = collection.aggregate(session, pipe);
+
+		for(auto i : result) {
+		}
+	}
+
+	if(state.thread_index == 0) {
+		//collection.drop();
+		// This is the first thread, so do destruction here (delete documents etc..)
+		// TODO Figure out way to kill collection after all tests of suite is done
+	}
+	state.SetComplexityN(state.range(0));
+
+	state.SetItemsProcessed(state.range(0)*state.iterations());
+
+	// Set the counter as a rate. It will be presented divided
+	// by the duration of the benchmark.
+	// Meaning: per one second, how many 'foo's are processed?
+	state.counters["Ops"] = benchmark::Counter(state.iterations(), benchmark::Counter::kIsRate);
+
+	// Set the counter as a rate. It will be presented divided
+	// by the duration of the benchmark, and the result inverted.
+	// Meaning: how many seconds it takes to process one 'foo'?
+	state.counters["OpsInv"] = benchmark::Counter(state.iterations(), benchmark::Counter::kIsRate | benchmark::Counter::kInvert);
+}
+
+BENCHMARK(BM_MONGO_Read_Sum)->Apply(CustomArgumentsInserts3)->Complexity()->DenseThreadRange(1,4);
+
+static void BM_MONGO_Read_Sum_Transact(benchmark::State& state) {
+	auto conn = MongoDBHandler::GetConnection();
+	auto db = conn->database("bench");
+	auto collection = db.collection("read_bench");
+	std::random_device rd;  //Will be used to obtain a seed for the random number engine
+	std::mt19937 gen(rd()); //Standard mersenne_twister_engine seeded with rd()
+	std::uniform_int_distribution<> dis(0, 4);
+	// Per thread settings...
+	if(state.thread_index == 0) {
+		// This is the first thread, so do initialization here, build indexes etc...
+		CreateCollection(conn);
+		collection = db.collection("read_bench");
+		collection.indexes().drop_all();
+	}
+	auto session = conn->start_session();
+	for(auto _ : state) {
+		state.PauseTiming();
+		mongocxx::pipeline pipe;
+		pipe.limit(state.range(0));
+		pipe.group(bsoncxx::builder::stream::document{} << "_id"  << 1 << "count" << bsoncxx::builder::stream::open_document << "$sum" << "$a0" <<  bsoncxx::builder::stream::close_document << bsoncxx::builder::stream::finalize);
+		state.ResumeTiming();
+		session.start_transaction();
+		auto result = collection.aggregate(session, pipe);
+		for(auto i : result) {
+		}
+		session.commit_transaction();
+	}
+
+	if(state.thread_index == 0) {
+		//collection.drop();
+		// This is the first thread, so do destruction here (delete documents etc..)
+		// TODO Figure out way to kill collection after all tests of suite is done
+	}
+	state.SetComplexityN(state.range(0));
+
+	state.SetItemsProcessed(state.range(0)*state.iterations());
+
+	// Set the counter as a rate. It will be presented divided
+	// by the duration of the benchmark.
+	// Meaning: per one second, how many 'foo's are processed?
+	state.counters["Ops"] = benchmark::Counter(state.iterations(), benchmark::Counter::kIsRate);
+
+	// Set the counter as a rate. It will be presented divided
+	// by the duration of the benchmark, and the result inverted.
+	// Meaning: how many seconds it takes to process one 'foo'?
+	state.counters["OpsInv"] = benchmark::Counter(state.iterations(), benchmark::Counter::kIsRate | benchmark::Counter::kInvert);
+}
+
+BENCHMARK(BM_MONGO_Read_Sum_Transact)->Apply(CustomArgumentsInserts3)->Complexity()->DenseThreadRange(1,4);
+
+static void BM_MONGO_Read_Avg(benchmark::State& state) {
+	auto conn = MongoDBHandler::GetConnection();
+	auto db = conn->database("bench");
+	auto collection = db.collection("read_bench");
+	std::random_device rd;  //Will be used to obtain a seed for the random number engine
+	std::mt19937 gen(rd()); //Standard mersenne_twister_engine seeded with rd()
+	std::uniform_int_distribution<> dis(0, 4);
+	// Per thread settings...
+	if(state.thread_index == 0) {
+		// This is the first thread, so do initialization here, build indexes etc...
+		CreateCollection(conn);
+		collection = db.collection("read_bench");
+		collection.indexes().drop_all();
+	}
+	auto session = conn->start_session();
+	for(auto _ : state) {
+		state.PauseTiming();
+		mongocxx::pipeline pipe;
+		pipe.limit(state.range(0));
+		pipe.group(bsoncxx::builder::stream::document{} << "_id"  << 1 << "count" << bsoncxx::builder::stream::open_document << "$avg" << "$a0" <<  bsoncxx::builder::stream::close_document << bsoncxx::builder::stream::finalize);
+		state.ResumeTiming();
+		auto result = collection.aggregate(session, pipe);
+
+		for(auto i : result) {
+		}
+	}
+
+	if(state.thread_index == 0) {
+		//collection.drop();
+		// This is the first thread, so do destruction here (delete documents etc..)
+		// TODO Figure out way to kill collection after all tests of suite is done
+	}
+	state.SetComplexityN(state.range(0));
+
+	state.SetItemsProcessed(state.range(0)*state.iterations());
+
+	// Set the counter as a rate. It will be presented divided
+	// by the duration of the benchmark.
+	// Meaning: per one second, how many 'foo's are processed?
+	state.counters["Ops"] = benchmark::Counter(state.iterations(), benchmark::Counter::kIsRate);
+
+	// Set the counter as a rate. It will be presented divided
+	// by the duration of the benchmark, and the result inverted.
+	// Meaning: how many seconds it takes to process one 'foo'?
+	state.counters["OpsInv"] = benchmark::Counter(state.iterations(), benchmark::Counter::kIsRate | benchmark::Counter::kInvert);
+}
+
+BENCHMARK(BM_MONGO_Read_Avg)->Apply(CustomArgumentsInserts3)->Complexity()->DenseThreadRange(1,4);
+
+static void BM_MONGO_Read_Avg_Transact(benchmark::State& state) {
+	auto conn = MongoDBHandler::GetConnection();
+	auto db = conn->database("bench");
+	auto collection = db.collection("read_bench");
+	std::random_device rd;  //Will be used to obtain a seed for the random number engine
+	std::mt19937 gen(rd()); //Standard mersenne_twister_engine seeded with rd()
+	std::uniform_int_distribution<> dis(0, 4);
+	// Per thread settings...
+	if(state.thread_index == 0) {
+		// This is the first thread, so do initialization here, build indexes etc...
+		CreateCollection(conn);
+		collection = db.collection("read_bench");
+		collection.indexes().drop_all();
+	}
+	auto session = conn->start_session();
+	for(auto _ : state) {
+		state.PauseTiming();
+		mongocxx::pipeline pipe;
+		pipe.limit(state.range(0));
+		pipe.group(bsoncxx::builder::stream::document{} << "_id"  << 1 << "count" << bsoncxx::builder::stream::open_document << "$avg" << "$a0" <<  bsoncxx::builder::stream::close_document << bsoncxx::builder::stream::finalize);
+		state.ResumeTiming();
+		session.start_transaction();
+		auto result = collection.aggregate(session, pipe);
+		for(auto i : result) {
+		}
+		session.commit_transaction();
+	}
+
+	if(state.thread_index == 0) {
+		//collection.drop();
+		// This is the first thread, so do destruction here (delete documents etc..)
+		// TODO Figure out way to kill collection after all tests of suite is done
+	}
+	state.SetComplexityN(state.range(0));
+
+	state.SetItemsProcessed(state.range(0)*state.iterations());
+
+	// Set the counter as a rate. It will be presented divided
+	// by the duration of the benchmark.
+	// Meaning: per one second, how many 'foo's are processed?
+	state.counters["Ops"] = benchmark::Counter(state.iterations(), benchmark::Counter::kIsRate);
+
+	// Set the counter as a rate. It will be presented divided
+	// by the duration of the benchmark, and the result inverted.
+	// Meaning: how many seconds it takes to process one 'foo'?
+	state.counters["OpsInv"] = benchmark::Counter(state.iterations(), benchmark::Counter::kIsRate | benchmark::Counter::kInvert);
+}
+
+BENCHMARK(BM_MONGO_Read_Avg_Transact)->Apply(CustomArgumentsInserts3)->Complexity()->DenseThreadRange(1,4);
+
+static void BM_MONGO_Read_Mul(benchmark::State& state) {
+	auto conn = MongoDBHandler::GetConnection();
+	auto db = conn->database("bench");
+	auto collection = db.collection("read_bench");
+	std::random_device rd;  //Will be used to obtain a seed for the random number engine
+	std::mt19937 gen(rd()); //Standard mersenne_twister_engine seeded with rd()
+	std::uniform_int_distribution<> dis(0, 4);
+	// Per thread settings...
+	if(state.thread_index == 0) {
+		// This is the first thread, so do initialization here, build indexes etc...
+		CreateCollection(conn);
+		collection = db.collection("read_bench");
+		collection.indexes().drop_all();
+	}
+	auto session = conn->start_session();
+	for(auto _ : state) {
+		state.PauseTiming();
+		mongocxx::pipeline pipe;
+		pipe.limit(state.range(0));
+		pipe.project(bsoncxx::builder::stream::document{} << "_id"  << 1 << "a0" << bsoncxx::builder::stream::open_document << "$multiply" << bsoncxx::builder::stream::open_array << "$a0" << 2 << bsoncxx::builder::stream::close_array <<  bsoncxx::builder::stream::close_document << bsoncxx::builder::stream::finalize);
+		state.ResumeTiming();
+		auto result = collection.aggregate(session, pipe);
+
+		for(auto i : result) {
+		}
+	}
+
+	if(state.thread_index == 0) {
+		//collection.drop();
+		// This is the first thread, so do destruction here (delete documents etc..)
+		// TODO Figure out way to kill collection after all tests of suite is done
+	}
+	state.SetComplexityN(state.range(0));
+
+	state.SetItemsProcessed(state.range(0)*state.iterations());
+
+	// Set the counter as a rate. It will be presented divided
+	// by the duration of the benchmark.
+	// Meaning: per one second, how many 'foo's are processed?
+	state.counters["Ops"] = benchmark::Counter(state.iterations(), benchmark::Counter::kIsRate);
+
+	// Set the counter as a rate. It will be presented divided
+	// by the duration of the benchmark, and the result inverted.
+	// Meaning: how many seconds it takes to process one 'foo'?
+	state.counters["OpsInv"] = benchmark::Counter(state.iterations(), benchmark::Counter::kIsRate | benchmark::Counter::kInvert);
+}
+
+BENCHMARK(BM_MONGO_Read_Mul)->Apply(CustomArgumentsInserts3)->Complexity()->DenseThreadRange(1,4);
+
+static void BM_MONGO_Read_Mul_Transact(benchmark::State& state) {
+	auto conn = MongoDBHandler::GetConnection();
+	auto db = conn->database("bench");
+	auto collection = db.collection("read_bench");
+	std::random_device rd;  //Will be used to obtain a seed for the random number engine
+	std::mt19937 gen(rd()); //Standard mersenne_twister_engine seeded with rd()
+	std::uniform_int_distribution<> dis(0, 4);
+	// Per thread settings...
+	if(state.thread_index == 0) {
+		// This is the first thread, so do initialization here, build indexes etc...
+		CreateCollection(conn);
+		collection = db.collection("read_bench");
+		collection.indexes().drop_all();
+	}
+	auto session = conn->start_session();
+	for(auto _ : state) {
+		state.PauseTiming();
+		mongocxx::pipeline pipe;
+		pipe.limit(state.range(0));
+		pipe.project(bsoncxx::builder::stream::document{} << "_id"  << 1 << "a0" << bsoncxx::builder::stream::open_document << "$multiply" << bsoncxx::builder::stream::open_array << "$a0" << 2 << bsoncxx::builder::stream::close_array <<  bsoncxx::builder::stream::close_document << bsoncxx::builder::stream::finalize);
+		state.ResumeTiming();
+		session.start_transaction();
+		auto result = collection.aggregate(session, pipe);
+		for(auto i : result) {
+		}
+		session.commit_transaction();
+	}
+
+	if(state.thread_index == 0) {
+		//collection.drop();
+		// This is the first thread, so do destruction here (delete documents etc..)
+		// TODO Figure out way to kill collection after all tests of suite is done
+	}
+	state.SetComplexityN(state.range(0));
+
+	state.SetItemsProcessed(state.range(0)*state.iterations());
+
+	// Set the counter as a rate. It will be presented divided
+	// by the duration of the benchmark.
+	// Meaning: per one second, how many 'foo's are processed?
+	state.counters["Ops"] = benchmark::Counter(state.iterations(), benchmark::Counter::kIsRate);
+
+	// Set the counter as a rate. It will be presented divided
+	// by the duration of the benchmark, and the result inverted.
+	// Meaning: how many seconds it takes to process one 'foo'?
+	state.counters["OpsInv"] = benchmark::Counter(state.iterations(), benchmark::Counter::kIsRate | benchmark::Counter::kInvert);
+}
+
+BENCHMARK(BM_MONGO_Read_Mul_Transact)->Apply(CustomArgumentsInserts3)->Complexity()->DenseThreadRange(1,4);
