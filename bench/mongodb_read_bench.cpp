@@ -1,5 +1,7 @@
 #include "benchmark/benchmark.h"
 #include "dbphd/mongodb/mongodb.hpp"
+#include "precalculate.hpp"
+
 #include <random>
 #include <string>
 #include <iostream>
@@ -21,7 +23,7 @@ using bsoncxx::builder::basic::kvp;
 using bsoncxx::builder::basic::make_document;
 
 static void CustomArgumentsInserts(benchmark::internal::Benchmark* b) {
-	for (int i = 1; i <= 5; ++i) { // fields to query
+	for (int i = 0; i <= Precalculator::Columns; ++i) { // fields to query
 		for (int j = 0; j <= i; ++j) { //  Indexes
 			b->Args({i, j});
 		}
@@ -29,10 +31,10 @@ static void CustomArgumentsInserts(benchmark::internal::Benchmark* b) {
 }
 
 static void CustomArgumentsInserts2(benchmark::internal::Benchmark* b) {
-	for (int i = 1; i <= 5; ++i) { // fields to query
-		for (int j = 0; j <= 5; ++j) { // fields to return
+	for (int i = 0; i <= Precalculator::Columns; ++i) { // fields to query
+		for (int j = 0; j <= Precalculator::Columns; ++j) { // fields to return
 			for (int k = 0; k <= i; ++k) { //  Indexes
-				for(int l = 1; l <= max(1, (int)pow(10,5-i)); l *= 2) { // Documents to return
+				for(int l = 1; l <= (int)pow(Precalculator::Values,Precalculator::Columns-i); l *= 2) { // Documents to return
 					b->Args({i, j, k, l});
 				}
 			}
@@ -41,7 +43,7 @@ static void CustomArgumentsInserts2(benchmark::internal::Benchmark* b) {
 }
 
 static void CustomArgumentsInserts3(benchmark::internal::Benchmark* b) {
-	for (int i = 1; i <= pow(10,5); i *= 2) { // documents to process
+	for (int i = 1; i <= Precalculator::Rows; i *= 2) { // documents to process
 		b->Args({i});
 	}
 }
@@ -49,6 +51,7 @@ static void CustomArgumentsInserts3(benchmark::internal::Benchmark* b) {
 static void CreateCollection(mongocxx::pool::entry& conn) {
 	static volatile bool created = false;
 	if(!created) {
+		cout << "Creating Mongo Read Collection...";
 		auto db = conn->database("bench");
 		auto collection = db.collection("read_bench");
 
@@ -56,22 +59,23 @@ static void CreateCollection(mongocxx::pool::entry& conn) {
 		collection = db.create_collection("read_bench");
 		collection.create_index(make_document(kvp("_id", 1)));
 
-		int values[] = {0,1,2,3,4,5,6,7,8,9};
-		for(int i = 0; i < pow(10,5); i += 100) {
+		for(int i = 0; i < Precalculator::Rows; i += 100) {
 			std::vector<bsoncxx::document::value> documents;
-			for(int j = 0; j < 100 && i+j < pow(10,5);++j) {
+			for(int j = 0; j < 100 && i+j < Precalculator::Rows;++j) {
 				auto builder = bsoncxx::builder::stream::document{};
 				auto doc = builder << "_id" << j+i;
 				int iteration = i+j;
-				for(int f = 0; f < 5; ++f) {
-					doc << ("a" + to_string(f)) << values[iteration%10];
-					iteration /= 10;
+				auto& rowval = Precalculator::PrecalcValues[iteration];
+				for(int f = 0; f < Precalculator::Columns; ++f) {
+					doc << ("a" + to_string(f)) << rowval[f];
 				}
 
 				documents.push_back(doc << bsoncxx::builder::stream::finalize);
 			}
 			collection.insert_many(documents);
 		}
+		cout<< " Done" << endl;
+		cout.flush();
 	}
 	created = true;
 }
@@ -107,12 +111,11 @@ static void BM_MONGO_Read_Count(benchmark::State& state) {
 	for(auto _ : state) {
 		state.PauseTiming();
 		auto builder = bsoncxx::builder::stream::document{};
-		auto doc = builder << "a0" << dis(gen);
-		for(int n = 1; n < state.range(0); ++n) {
-			doc << ("a" + to_string(n)) << dis(gen);
+		for(int n = 0; n < state.range(0); ++n) {
+			builder << ("a" + to_string(n)) << dis(gen);
 		}
 		state.ResumeTiming();
-		count += collection.count_documents(session, doc << bsoncxx::builder::stream::finalize);
+		count += collection.count_documents(session, builder << bsoncxx::builder::stream::finalize);
 	}
 
 	if(state.thread_index == 0) {
@@ -167,14 +170,13 @@ static void BM_MONGO_Read_Count_Transact(benchmark::State& state) {
 	for(auto _ : state) {
 		state.PauseTiming();
 		auto builder = bsoncxx::builder::stream::document{};
-		auto doc = builder << "a0" << dis(gen);
-		for(int n = 1; n < state.range(0); ++n) {
-			doc << ("a" + to_string(n)) << dis(gen);
+		for(int n = 0; n < state.range(0); ++n) {
+			builder << ("a" + to_string(n)) << dis(gen);
 		}
 
 		state.ResumeTiming();
 		session.start_transaction();
-		count += collection.count_documents(session, doc << bsoncxx::builder::stream::finalize);
+		count += collection.count_documents(session, builder << bsoncxx::builder::stream::finalize);
 		session.commit_transaction();
 	}
 
@@ -230,9 +232,8 @@ static void BM_MONGO_Reads(benchmark::State& state) {
 	for(auto _ : state) {
 		state.PauseTiming();
 		auto builder = bsoncxx::builder::stream::document{};
-		auto doc = builder << "a0" << dis(gen);
-		for(int n = 1; n < state.range(0); ++n) {
-			doc << ("a" + to_string(n)) << dis(gen);
+		for(int n = 0; n < state.range(0); ++n) {
+			builder << ("a" + to_string(n)) << dis(gen);
 		}
 		mongocxx::options::find options;
 		options.batch_size(INT32_MAX).limit(state.range(3));
@@ -246,7 +247,7 @@ static void BM_MONGO_Reads(benchmark::State& state) {
 			options.projection(bsoncxx::builder::stream::document{} << "_id " << 1 << bsoncxx::builder::stream::finalize);
 		}
 		state.ResumeTiming();
-		for(auto i : collection.find(session, doc << bsoncxx::builder::stream::finalize, options)) {
+		for(auto i : collection.find(session, builder << bsoncxx::builder::stream::finalize, options)) {
 			++count;
 		}
 	}
@@ -303,9 +304,8 @@ static void BM_MONGO_Reads_Transact(benchmark::State& state) {
 	for(auto _ : state) {
 		state.PauseTiming();
 		auto builder = bsoncxx::builder::stream::document{};
-		auto doc = builder << "a0" << dis(gen);
-		for(int n = 1; n < state.range(0); ++n) {
-			doc << ("a" + to_string(n)) << dis(gen);
+		for(int n = 0; n < state.range(0); ++n) {
+			builder << ("a" + to_string(n)) << dis(gen);
 		}
 		mongocxx::options::find options;
 		options.batch_size(INT32_MAX).limit(state.range(3));
@@ -320,7 +320,7 @@ static void BM_MONGO_Reads_Transact(benchmark::State& state) {
 		}
 		state.ResumeTiming();
 		session.start_transaction();
-		auto cursor = collection.find(session, doc << bsoncxx::builder::stream::finalize, options);
+		auto cursor = collection.find(session, builder << bsoncxx::builder::stream::finalize, options);
 		for(auto i : cursor) {
 			++count;
 		}

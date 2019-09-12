@@ -1,5 +1,12 @@
 set(BENCHMARK_ENABLE_TESTING OFF CACHE BOOL "Suppressing benchmark's tests" FORCE)
 
+find_package(OpenMP)
+if (OPENMP_FOUND)
+    set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${OpenMP_C_FLAGS}")
+    set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
+    set (CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${OpenMP_EXE_LINKER_FLAGS}")
+endif()
+
 add_subdirectory(benchmark)
 include_directories(benchmark/include)
 
@@ -23,6 +30,7 @@ set(bench_cpp
 	postgres_compound_bench.cpp
 	mysql_compound_bench.cpp
 	mongodb_compound_bench.cpp
+	precalculate.cpp
 )
 
 add_executable(bench_dbphd ${bench_cpp})

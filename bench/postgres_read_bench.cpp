@@ -1,5 +1,6 @@
 #include "benchmark/benchmark.h"
 #include "dbphd/postgresql/postgresql.hpp"
+#include "precalculate.hpp"
 
 #include <random>
 #include <iostream>
@@ -7,7 +8,7 @@
 using namespace std;
 
 static void CustomArgumentsInserts(benchmark::internal::Benchmark* b) {
-	for (int i = 1; i <= 5; ++i) { // fields to query
+	for (int i = 0; i <= Precalculator::Columns; ++i) { // fields to query
 		for (int j = 0; j <= i; ++j) { //  Indexes
 			b->Args({i, j});
 		}
@@ -15,10 +16,10 @@ static void CustomArgumentsInserts(benchmark::internal::Benchmark* b) {
 }
 
 static void CustomArgumentsInserts2(benchmark::internal::Benchmark* b) {
-	for (int i = 1; i <= 5; ++i) { // fields to query
-		for (int j = 0; j <= 5; ++j) { // fields to return
+	for (int i = 0; i <= Precalculator::Columns; ++i) { // fields to query
+		for (int j = 0; j <= Precalculator::Columns; ++j) { // fields to return
 			for (int k = 0; k <= i; ++k) { //  Indexes
-				for(int l = 1; l <= max(1, (int)pow(10,5-i)); l *= 2) { // Documents to return
+				for(int l = 1; l <= (int)pow(Precalculator::Values,Precalculator::Columns-i); l *= 2) { // Documents to return
 					b->Args({i, j, k, l});
 				}
 			}
@@ -27,15 +28,16 @@ static void CustomArgumentsInserts2(benchmark::internal::Benchmark* b) {
 }
 
 static void CustomArgumentsInserts3(benchmark::internal::Benchmark* b) {
-	for (int i = 1; i <= pow(10,5); i *= 2) { // documents to process
+	for (int i = 1; i <= Precalculator::Rows; i *= 2) { // documents to process
 		b->Args({i});
 	}
 }
 
-
 static void CreateTable(std::shared_ptr<pqxx::connection> conn) {
 	static volatile bool created = false;
 	if(!created) {
+		cout << "Creating Postgres Read Collection...";
+		cout.flush();
 		try{
 			PostgreSQLDBHandler::CreateDatabase(conn, "bench");
 		} catch(...) {
@@ -46,9 +48,9 @@ static void CreateTable(std::shared_ptr<pqxx::connection> conn) {
 CREATE TABLE read_bench (
 	_id  serial PRIMARY KEY,
 )|";
-		for(int field = 0; field < 5; ++field) {
+		for(int field = 0; field < Precalculator::Columns; ++field) {
 			createQuery.append("a" + to_string(field) + " INT");
-			if(field != 4)
+			if(field != Precalculator::Columns-1)
 				createQuery.append(",\r\n");
 		}
 		createQuery.append(R"|(
@@ -58,18 +60,19 @@ CREATE TABLE read_bench (
 			pqxx::nontransaction N(*conn);
 			pqxx::result R(N.exec(createQuery));
 		}
+		
+		int batchsize = 10000;
 
-		int values[] = {0,1,2,3,4,5,6,7,8,9};
-		for(int i = 0; i < pow(10,5); i += 100) {
+		for(int i = 0; i < Precalculator::Rows; i += batchsize) {
 			string query = "INSERT INTO bench.read_bench VALUES\r\n";
-			for(int j = 0; j < 100 && i+j < pow(10,5);++j) {
+			for(int j = 0; j < batchsize && i+j < Precalculator::Rows;++j) {
 				query.append("	(DEFAULT");
 				int iteration = i+j;
-				for(int f = 0; f < 5; ++f) {
-					query.append("," + to_string(values[iteration%10]));
-					iteration /= 10;
+				auto& rowval = Precalculator::PrecalcValues[iteration];
+				for(int f = 0; f < Precalculator::Columns; ++f) {
+					query.append("," + to_string(rowval[f]));
 				}
-				if(j != 99 && j+i != pow(10,5)-1) {
+				if((j != batchsize - 1) && j+i != Precalculator::Rows-1) {
 					query.append("),");
 				} else {
 					query.append(");");
@@ -78,6 +81,8 @@ CREATE TABLE read_bench (
 				}
 			}
 		}
+		cout << " Done" << endl;
+		cout.flush();
 	}
 	created = true;
 }
@@ -110,10 +115,12 @@ static void BM_PQXX_Read_Count(benchmark::State& state) {
 	uint64_t count = 0;
 	for(auto _ : state) {
 		state.PauseTiming();
-		string query = "SELECT COUNT(*) FROM bench.read_bench WHERE\r\n";
-		query += "a0 = " + to_string(dis(gen));
-		for(int n = 1; n < state.range(0); ++n) {
-			query += " AND a" + to_string(n) + " = " + to_string(dis(gen));
+		string query = "SELECT COUNT(*) FROM bench.read_bench";
+		if(state.range(0) > 0)  {
+			query += " WHERE\r\n a0 = " + to_string(dis(gen));
+			for(int n = 1; n < state.range(0); ++n) {
+				query += " AND a" + to_string(n) + " = " + to_string(dis(gen));
+			}
 		}
 		state.ResumeTiming();
 		pqxx::nontransaction N(*conn);
@@ -170,10 +177,12 @@ static void BM_PQXX_Read_Count_Transact(benchmark::State& state) {
 	uint64_t count = 0;
 	for(auto _ : state) {
 		state.PauseTiming();
-		string query = "SELECT COUNT(*) FROM bench.read_bench WHERE\r\n";
-		query += "a0 = " + to_string(dis(gen));
-		for(int n = 1; n < state.range(0); ++n) {
-			query += " AND a" + to_string(n) + " = " + to_string(dis(gen));
+		string query = "SELECT COUNT(*) FROM bench.read_bench";
+		if(state.range(0) > 0)  {
+			query += " WHERE\r\n a0 = " + to_string(dis(gen));
+			for(int n = 1; n < state.range(0); ++n) {
+				query += " AND a" + to_string(n) + " = " + to_string(dis(gen));
+			}
 		}
 		state.ResumeTiming();
 		pqxx::work w(*conn);
@@ -235,10 +244,12 @@ static void BM_PQXX_Reads(benchmark::State& state) {
 		for(int i = 0; i < state.range(1); ++i) {
 			selectclause += ",a" + to_string(i);
 		}
-		string query = selectclause + " FROM bench.read_bench WHERE\r\n";
-		query += "a0 = " + to_string(dis(gen));
-		for(int n = 1; n < state.range(0); ++n) {
-			query += " AND a" + to_string(n) + " = " + to_string(dis(gen));
+		string query = selectclause + " FROM bench.read_bench";
+		if(state.range(0) > 0)  {
+			query += " WHERE\r\n a0 = " + to_string(dis(gen));
+			for(int n = 1; n < state.range(0); ++n) {
+				query += " AND a" + to_string(n) + " = " + to_string(dis(gen));
+			}
 		}
 		query += " LIMIT " + to_string(state.range(3));
 		query += ";";
@@ -302,10 +313,12 @@ static void BM_PQXX_Reads_Transact(benchmark::State& state) {
 		for(int i = 0; i < state.range(1); ++i) {
 			selectclause += ",a" + to_string(i);
 		}
-		string query = selectclause + " FROM bench.read_bench WHERE\r\n";
-		query += "a0 = " + to_string(dis(gen));
-		for(int n = 1; n < state.range(0); ++n) {
-			query += " AND a" + to_string(n) + " = " + to_string(dis(gen));
+		string query = selectclause + " FROM bench.read_bench";
+		if(state.range(0) > 0)  {
+			query += " WHERE\r\n a0 = " + to_string(dis(gen));
+			for(int n = 1; n < state.range(0); ++n) {
+				query += " AND a" + to_string(n) + " = " + to_string(dis(gen));
+			}
 		}
 		query += " LIMIT " + to_string(state.range(3));
 		query += ";";
