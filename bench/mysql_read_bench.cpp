@@ -1,5 +1,6 @@
 #include "benchmark/benchmark.h"
 #include "dbphd/mysqldb/mysqldb.hpp"
+#include "precalculate.hpp"
 
 #include <random>
 #include <iostream>
@@ -7,7 +8,7 @@
 using namespace std;
 
 static void CustomArgumentsInserts(benchmark::internal::Benchmark* b) {
-	for (int i = 1; i <= 5; ++i) { // fields to query
+	for (int i = 0; i <= Precalculator::Columns; ++i) { // fields to query
 		for (int j = 0; j <= i; ++j) { //  Indexes
 			b->Args({i, j});
 		}
@@ -15,10 +16,10 @@ static void CustomArgumentsInserts(benchmark::internal::Benchmark* b) {
 }
 
 static void CustomArgumentsInserts2(benchmark::internal::Benchmark* b) {
-	for (int i = 1; i <= 5; ++i) { // fields to query
-		for (int j = 0; j <= 5; ++j) { // fields to return
+	for (int i = 0; i <= Precalculator::Columns; ++i) { // fields to query
+		for (int j = 0; j <= Precalculator::Columns; ++j) { // fields to return
 			for (int k = 0; k <= i; ++k) { //  Indexes
-				for(int l = 1; l <= max(1, (int)pow(10,5-i)); l *= 2) { // Documents to return
+				for(int l = 1; l <= (int)pow(Precalculator::Values,Precalculator::Columns-i); l *= 2) { // Documents to return
 					b->Args({i, j, k, l});
 				}
 			}
@@ -27,7 +28,7 @@ static void CustomArgumentsInserts2(benchmark::internal::Benchmark* b) {
 }
 
 static void CustomArgumentsInserts3(benchmark::internal::Benchmark* b) {
-	for (int i = 1; i <= pow(10,5); i *= 2) { // documents to process
+	for (int i = 1; i <= Precalculator::Rows; i *= 2) { // documents to process
 		b->Args({i});
 	}
 }
@@ -35,6 +36,8 @@ static void CustomArgumentsInserts3(benchmark::internal::Benchmark* b) {
 static void CreateTable(mysqlx::Session &conn) {
 	static volatile bool created = false;
 	if(!created) {
+		cout << "Creating Mysql Read Table...";
+		cout.flush();
 		MySQLDBHandler::CreateDatabase(conn, "bench");
 		MySQLDBHandler::DropTable(conn, "bench", "read_bench");
 		string createQuery = R"|(
@@ -42,7 +45,7 @@ CREATE TABLE read_bench (
 	_id  INT AUTO_INCREMENT,
 	a0 INT,
 )|";
-		for(int field = 1; field < 5; ++field) {
+		for(int field = 1; field < Precalculator::Columns; ++field) {
 			createQuery.append("a" + to_string(field) + " INT,");
 		}
 		createQuery.append(R"|(
@@ -53,21 +56,23 @@ CREATE TABLE read_bench (
 		auto db = conn.getSchema("bench");
 		auto table = db.getTable("read_bench");
 
-		int values[] = {0,1,2,3,4,5,6,7,8,9};
-		for(int i = 0; i < pow(10,5); i += 100) {
+		int batchsize = 10000;
+		for(int i = 0; i < Precalculator::Rows; i += batchsize) {
 			auto tableInsert = table.insert();
-			for(int j = 0; j < 100 && i+j < pow(10,5);++j) {
+			for(int j = 0; j < batchsize && i+j < Precalculator::Rows;++j) {
 				mysqlx::Row row;
 				row.set(0, mysqlx::nullvalue);
 				int iteration = i+j;
-				for(int f = 1; f <= 5; ++f) {
-					row.set(f, values[iteration%10]);
-					iteration /= 10;
+				auto& rowval = Precalculator::PrecalcValues[iteration];
+				for(int f = 1; f <= Precalculator::Columns; ++f) {
+					row.set(f, rowval[f-1]);
 				}
 				tableInsert.rows(row);
 			}
 			auto result = tableInsert.execute();
 		}
+		cout << " Done" << endl;
+		cout.flush();
 	}
 	created = true;
 }
@@ -100,11 +105,13 @@ static void BM_MYSQL_Read_Count(benchmark::State& state) {
 	for(auto _ : state) {
 		state.PauseTiming();
 		auto tableSelect = table.select("COUNT(*)");
-		string whereclause = "a0 = " + to_string(dis(gen));
-		for(int n = 1; n < state.range(0); ++n) {
-			whereclause += " AND a" + to_string(n) + " = " + to_string(dis(gen));
+		if(state.range(0) > 0) {
+			string whereclause = "a0 = " + to_string(dis(gen));
+			for(int n = 1; n < state.range(0); ++n) {
+				whereclause += " AND a" + to_string(n) + " = " + to_string(dis(gen));
+			}
+			tableSelect.where(whereclause);
 		}
-		tableSelect.where(whereclause);
 		state.ResumeTiming();
 		auto result = tableSelect.execute().fetchOne();
 		count += result.get(0).get<uint64_t>();
@@ -159,11 +166,13 @@ static void BM_MYSQL_Read_Count_Transact(benchmark::State& state) {
 	for(auto _ : state) {
 		state.PauseTiming();
 		auto tableSelect = table.select("COUNT(*)");
-		string whereclause = "a0 = " + to_string(dis(gen));
-		for(int n = 1; n < state.range(0); ++n) {
-			whereclause += " AND a" + to_string(n) + " = " + to_string(dis(gen));
+		if(state.range(0) > 0) {
+			string whereclause = "a0 = " + to_string(dis(gen));
+			for(int n = 1; n < state.range(0); ++n) {
+				whereclause += " AND a" + to_string(n) + " = " + to_string(dis(gen));
+			}
+			tableSelect.where(whereclause);
 		}
-		tableSelect.where(whereclause);
 		state.ResumeTiming();
 		conn.startTransaction();
 		auto result = tableSelect.execute().fetchOne();
@@ -226,11 +235,13 @@ static void BM_MYSQL_Reads(benchmark::State& state) {
 		}
 
 		auto tableSelect = table.select(selectclause);
-		string whereclause = "a0 = " + to_string(dis(gen));
-		for(int n = 1; n < state.range(0); ++n) {
-			whereclause += " AND a" + to_string(n) + " = " + to_string(dis(gen));
+		if(state.range(0) > 0) {
+			string whereclause = "a0 = " + to_string(dis(gen));
+			for(int n = 1; n < state.range(0); ++n) {
+				whereclause += " AND a" + to_string(n) + " = " + to_string(dis(gen));
+			}
+			tableSelect.where(whereclause);
 		}
-		tableSelect.where(whereclause);
 		tableSelect.limit(state.range(3));
 		state.ResumeTiming();
 		std::list<mysqlx::Row> result = tableSelect.execute().fetchAll();
@@ -291,13 +302,14 @@ static void BM_MYSQL_Reads_Transact(benchmark::State& state) {
 		for(int i = 0; i < state.range(1); ++i) {
 			selectclause.push_back("a" + to_string(i));
 		}
-
 		auto tableSelect = table.select(selectclause);
-		string whereclause = "a0 = " + to_string(dis(gen));
-		for(int n = 1; n < state.range(0); ++n) {
-			whereclause += " AND a" + to_string(n) + " = " + to_string(dis(gen));
+		if(state.range(0) > 0) {
+			string whereclause = "a0 = " + to_string(dis(gen));
+			for(int n = 1; n < state.range(0); ++n) {
+				whereclause += " AND a" + to_string(n) + " = " + to_string(dis(gen));
+			}
+			tableSelect.where(whereclause);
 		}
-		tableSelect.where(whereclause);
 		tableSelect.limit(state.range(3));
 		state.ResumeTiming();
 		conn.startTransaction();
