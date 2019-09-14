@@ -4,6 +4,7 @@
 
 #include <random>
 #include <iostream>
+#include <chrono>
 
 using namespace std;
 
@@ -33,11 +34,22 @@ static void CustomArgumentsInserts3(benchmark::internal::Benchmark* b) {
 	}
 }
 
+static void CustomArgumentsInserts4(benchmark::internal::Benchmark* b) {
+	for (int i = 1; i <= Precalculator::Columns; ++i) { // fields to sort
+		for (int k = 0; k <= i; ++k) { //  Indexes
+			for(int l = 1; l <= (int)pow(Precalculator::Values,Precalculator::Columns); l *= 2) { // Documents to return
+				b->Args({i, k, l});
+			}
+		}
+	}
+}
+
 static void CreateTable(std::shared_ptr<pqxx::connection> conn) {
 	static volatile bool created = false;
 	if(!created) {
-		cout << "Creating Postgres Read Collection...";
+		cout << endl << "Creating Postgres Read Collection...";
 		cout.flush();
+		auto start = chrono::steady_clock::now();
 		try{
 			PostgreSQLDBHandler::CreateDatabase(conn, "bench");
 		} catch(...) {
@@ -81,7 +93,8 @@ CREATE TABLE read_bench (
 				}
 			}
 		}
-		cout << " Done" << endl;
+		auto end = chrono::steady_clock::now();
+		cout<< " Done in " << chrono::duration <double, milli> (end-start).count() << " ms" << endl << endl;
 		cout.flush();
 	}
 	created = true;
@@ -647,3 +660,136 @@ static void BM_PQXX_Read_Mul_Transact(benchmark::State& state) {
 }
 
 BENCHMARK(BM_PQXX_Read_Mul_Transact)->Apply(CustomArgumentsInserts3)->Complexity()->DenseThreadRange(1, 4);
+
+static void BM_PQXX_Read_Sort(benchmark::State& state) {
+	auto conn = PostgreSQLDBHandler::GetConnection();
+	std::random_device rd;  //Will be used to obtain a seed for the random number engine
+	std::mt19937 gen(rd()); //Standard mersenne_twister_engine seeded with rd()
+	std::uniform_int_distribution<> dis(0, 4);
+	// Per thread settings...
+	if(state.thread_index == 0) {
+		// This is the first thread, so do initialization here, build indexes etc...
+		CreateTable(conn);
+		try {
+			string query = "DROP INDEX IF EXISTS bench.read_bench_idx;";
+			pqxx::nontransaction N(*conn);
+			pqxx::result R(N.exec(query));
+		}catch(...) {
+		}
+		if(state.range(1) > 0) {
+			string indexCreate = "CREATE INDEX read_bench_idx on bench.read_bench (a0";
+			for(int index = 1; index < state.range(1); ++index) {
+				indexCreate += ",a" + to_string(index);
+			}
+			indexCreate += ");";
+			pqxx::nontransaction N(*conn);
+			pqxx::result R(N.exec(indexCreate));
+		}
+	}
+	uint64_t count = 0;
+	for(auto _ : state) {
+		state.PauseTiming();
+		string selectclause = "SELECT _id";
+		string query = selectclause + " FROM bench.read_bench";
+		if(state.range(0) > 0)  {
+			query += " ORDER BY a0 DESC";
+			for(int n = 1; n < state.range(0); ++n) {
+				query += ", a" + to_string(n) + " DESC";
+			}
+		}
+		query += " LIMIT " + to_string(state.range(2));
+		query += ";";
+		state.ResumeTiming();
+		pqxx::nontransaction N(*conn);
+		auto res = N.exec(query);
+		for(auto i: res)
+			++count;
+	}
+
+	if(state.thread_index == 0) {
+		//PostgreSQLDBHandler::DropTable(conn, "bench", "create_bench");
+		// This is the first thread, so do destruction here (delete documents etc..)
+	}
+
+	state.SetItemsProcessed(count);
+
+	// Set the counter as a rate. It will be presented divided
+	// by the duration of the benchmark.
+	// Meaning: per one second, how many 'foo's are processed?
+	state.counters["Ops"] = benchmark::Counter(state.iterations(), benchmark::Counter::kIsRate);
+
+	// Set the counter as a rate. It will be presented divided
+	// by the duration of the benchmark, and the result inverted.
+	// Meaning: how many seconds it takes to process one 'foo'?
+	state.counters["OpsInv"] = benchmark::Counter(state.iterations(), benchmark::Counter::kIsRate | benchmark::Counter::kInvert);
+	state.counters.insert({{"Fields", benchmark::Counter(state.range(0), benchmark::Counter::kAvgThreads)}, {"Indexes", benchmark::Counter(state.range(1), benchmark::Counter::kAvgThreads)}, {"Limit", benchmark::Counter(state.range(2), benchmark::Counter::kAvgThreads)}});
+}
+
+BENCHMARK(BM_PQXX_Read_Sort)->Apply(CustomArgumentsInserts4)->Complexity()->DenseThreadRange(1, 4);
+
+static void BM_PQXX_Read_Sort_Transact(benchmark::State& state) {
+	auto conn = PostgreSQLDBHandler::GetConnection();
+	std::random_device rd;  //Will be used to obtain a seed for the random number engine
+	std::mt19937 gen(rd()); //Standard mersenne_twister_engine seeded with rd()
+	std::uniform_int_distribution<> dis(0, 4);
+	// Per thread settings...
+	if(state.thread_index == 0) {
+		// This is the first thread, so do initialization here, build indexes etc...
+		CreateTable(conn);
+		try {
+			string query = "DROP INDEX IF EXISTS bench.read_bench_idx;";
+			pqxx::nontransaction N(*conn);
+			pqxx::result R(N.exec(query));
+		}catch(...) {
+		}
+		if(state.range(1) > 0) {
+			string indexCreate = "CREATE INDEX read_bench_idx on bench.read_bench (a0";
+			for(int index = 1; index < state.range(1); ++index) {
+				indexCreate += ",a" + to_string(index);
+			}
+			indexCreate += ");";
+			pqxx::nontransaction N(*conn);
+			pqxx::result R(N.exec(indexCreate));
+		}
+	}
+	uint64_t count = 0;
+	for(auto _ : state) {
+		state.PauseTiming();
+		string selectclause = "SELECT _id";
+		string query = selectclause + " FROM bench.read_bench";
+		if(state.range(0) > 0)  {
+			query += " ORDER BY a0 DESC";
+			for(int n = 1; n < state.range(0); ++n) {
+				query += ", a" + to_string(n) + " DESC";
+			}
+		}
+		query += " LIMIT " + to_string(state.range(2));
+		query += ";";
+		state.ResumeTiming();
+		pqxx::work w(*conn);
+		auto res = w.exec(query);
+		for(auto i: res)
+			++count;
+		w.commit();
+	}
+
+	if(state.thread_index == 0) {
+		//PostgreSQLDBHandler::DropTable(conn, "bench", "create_bench");
+		// This is the first thread, so do destruction here (delete documents etc..)
+	}
+
+	state.SetItemsProcessed(count);
+
+	// Set the counter as a rate. It will be presented divided
+	// by the duration of the benchmark.
+	// Meaning: per one second, how many 'foo's are processed?
+	state.counters["Ops"] = benchmark::Counter(state.iterations(), benchmark::Counter::kIsRate);
+
+	// Set the counter as a rate. It will be presented divided
+	// by the duration of the benchmark, and the result inverted.
+	// Meaning: how many seconds it takes to process one 'foo'?
+	state.counters["OpsInv"] = benchmark::Counter(state.iterations(), benchmark::Counter::kIsRate | benchmark::Counter::kInvert);
+	state.counters.insert({{"Fields", benchmark::Counter(state.range(0), benchmark::Counter::kAvgThreads)}, {"Indexes", benchmark::Counter(state.range(1), benchmark::Counter::kAvgThreads)}, {"Limit", benchmark::Counter(state.range(2), benchmark::Counter::kAvgThreads)}});
+}
+
+BENCHMARK(BM_PQXX_Read_Sort_Transact)->Apply(CustomArgumentsInserts4)->Complexity()->DenseThreadRange(1, 4);
