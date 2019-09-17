@@ -44,6 +44,14 @@ static void CustomArgumentsInserts4(benchmark::internal::Benchmark* b) {
 	}
 }
 
+static void CustomArgumentsInserts5(benchmark::internal::Benchmark* b) {
+	for (int i = 0; i <= 2; ++i) { // fields to index
+		for(int l = 1; l <= (int)pow(Precalculator::Values,Precalculator::Columns); l *= 2) { // Documents to return
+			b->Args({i, l});
+		}
+	}
+}
+
 static void CreateTable(std::shared_ptr<pqxx::connection> conn) {
 	static volatile bool created = false;
 	if(!created) {
@@ -793,3 +801,123 @@ static void BM_PQXX_Read_Sort_Transact(benchmark::State& state) {
 }
 
 BENCHMARK(BM_PQXX_Read_Sort_Transact)->Apply(CustomArgumentsInserts4)->Complexity()->DenseThreadRange(1, 4);
+
+static void BM_PQXX_Read_Join(benchmark::State& state) {
+	auto conn = PostgreSQLDBHandler::GetConnection();
+	std::random_device rd;  //Will be used to obtain a seed for the random number engine
+	std::mt19937 gen(rd()); //Standard mersenne_twister_engine seeded with rd()
+	std::uniform_int_distribution<> dis(0, 4);
+	// Per thread settings...
+	if(state.thread_index == 0) {
+		// This is the first thread, so do initialization here, build indexes etc...
+		CreateTable(conn);
+		try {
+			string query = "DROP INDEX IF EXISTS bench.read_bench_idx;";
+			pqxx::nontransaction N(*conn);
+			pqxx::result R(N.exec(query));
+		}catch(...) {
+		}
+		for(int index = 0; index < state.range(0); ++index) {
+			string indexCreate = "CREATE INDEX read_bench_idx_a" + to_string(index) + " on bench.read_bench a" + to_string(index);
+			indexCreate += ";";
+			pqxx::nontransaction N(*conn);
+			pqxx::result R(N.exec(indexCreate));
+		}
+	}
+	uint64_t count = 0;
+	for(auto _ : state) {
+		state.PauseTiming();
+		string selectclause = "SELECT *";
+		string query = selectclause + " FROM bench.read_bench b1 INNER JOIN bench.read_bench b2 ON b1.a0 = b2.a1 AND b1._id != b2._id ";
+		query += " LIMIT " + to_string(state.range(1));
+		query += ";";
+		state.ResumeTiming();
+		pqxx::nontransaction N(*conn);
+		auto res = N.exec(query);
+		for(auto i: res) {
+			++count;
+		}
+	}
+
+	if(state.thread_index == 0) {
+		//PostgreSQLDBHandler::DropTable(conn, "bench", "create_bench");
+		// This is the first thread, so do destruction here (delete documents etc..)
+	}
+	state.SetComplexityN(state.range(1));
+
+	state.SetItemsProcessed(state.range(1)*state.iterations());
+
+	// Set the counter as a rate. It will be presented divided
+	// by the duration of the benchmark.
+	// Meaning: per one second, how many 'foo's are processed?
+	state.counters["Ops"] = benchmark::Counter(state.iterations(), benchmark::Counter::kIsRate);
+
+	// Set the counter as a rate. It will be presented divided
+	// by the duration of the benchmark, and the result inverted.
+	// Meaning: how many seconds it takes to process one 'foo'?
+	state.counters["OpsInv"] = benchmark::Counter(state.iterations(), benchmark::Counter::kIsRate | benchmark::Counter::kInvert);
+	state.counters.insert({{"Indexes", benchmark::Counter(state.range(0), benchmark::Counter::kAvgThreads)}, {"Limit", benchmark::Counter(state.range(1), benchmark::Counter::kAvgThreads)}});
+}
+
+BENCHMARK(BM_PQXX_Read_Join)->Apply(CustomArgumentsInserts5)->Complexity()->DenseThreadRange(1, 4);
+
+static void BM_PQXX_Read_Join_Transact(benchmark::State& state) {
+	auto conn = PostgreSQLDBHandler::GetConnection();
+	std::random_device rd;  //Will be used to obtain a seed for the random number engine
+	std::mt19937 gen(rd()); //Standard mersenne_twister_engine seeded with rd()
+	std::uniform_int_distribution<> dis(0, 4);
+	// Per thread settings...
+	if(state.thread_index == 0) {
+		// This is the first thread, so do initialization here, build indexes etc...
+		CreateTable(conn);
+		try {
+			string query = "DROP INDEX IF EXISTS bench.read_bench_idx;";
+			pqxx::nontransaction N(*conn);
+			pqxx::result R(N.exec(query));
+		}catch(...) {
+		}
+		for(int index = 0; index < state.range(0); ++index) {
+			string indexCreate = "CREATE INDEX read_bench_idx_a" + to_string(index) + " on bench.read_bench a" + to_string(index);
+			indexCreate += ";";
+			pqxx::nontransaction N(*conn);
+			pqxx::result R(N.exec(indexCreate));
+		}
+	}
+	uint64_t count = 0;
+	for(auto _ : state) {
+		state.PauseTiming();
+		string selectclause = "SELECT *";
+		string query = selectclause + " FROM bench.read_bench b1 INNER JOIN bench.read_bench b2 ON b1.a0 = b2.a1 AND b1._id != b2._id ";
+		query += " LIMIT " + to_string(state.range(1));
+		query += ";";
+		state.ResumeTiming();
+		pqxx::work w(*conn);
+		auto res = w.exec(query);
+		for(auto i: res) {
+			++count;
+		}
+		w.commit();
+	}
+
+	if(state.thread_index == 0) {
+		//PostgreSQLDBHandler::DropTable(conn, "bench", "create_bench");
+		// This is the first thread, so do destruction here (delete documents etc..)
+	}
+	state.SetComplexityN(state.range(1));
+
+	state.SetItemsProcessed(state.range(1)*state.iterations());
+
+	// Set the counter as a rate. It will be presented divided
+	// by the duration of the benchmark.
+	// Meaning: per one second, how many 'foo's are processed?
+	state.counters["Ops"] = benchmark::Counter(state.iterations(), benchmark::Counter::kIsRate);
+
+	// Set the counter as a rate. It will be presented divided
+	// by the duration of the benchmark, and the result inverted.
+	// Meaning: how many seconds it takes to process one 'foo'?
+	state.counters["OpsInv"] = benchmark::Counter(state.iterations(), benchmark::Counter::kIsRate | benchmark::Counter::kInvert);
+	state.counters.insert({{"Indexes", benchmark::Counter(state.range(0), benchmark::Counter::kAvgThreads)}, {"Limit", benchmark::Counter(state.range(1), benchmark::Counter::kAvgThreads)}});
+}
+
+BENCHMARK(BM_PQXX_Read_Join_Transact)->Apply(CustomArgumentsInserts5)->Complexity()->DenseThreadRange(1, 4);
+
