@@ -3,21 +3,25 @@ project(dbphd)
 
 # Set build type to RELEASE by default:
 if(NOT CMAKE_BUILD_TYPE)
-  message(STATUS "No build type provided, default to RELEASE.")
-  set(CMAKE_BUILD_TYPE "RELEASE")
+	message(STATUS "No build type provided, default to RELEASE.")
+	set(CMAKE_BUILD_TYPE "RELEASE")
 endif()
 
-set( CMAKE_EXPORT_COMPILE_COMMANDS ON )
+if(UNIX AND NOT APPLE)
+	set(LINUX TRUE)
+endif()
+
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON )
 set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -DDEBUG")
-set (CMAKE_SKIP_BUILD_RPATH FALSE)
-set (CMAKE_BUILD_WITH_INSTALL_RPATH FALSE)
+set(CMAKE_SKIP_BUILD_RPATH FALSE)
+set(CMAKE_BUILD_WITH_INSTALL_RPATH FALSE)
 #set (CMAKE_INSTALL_RPATH "$CMAKE_INSTALL_PREFIX/lib")
-set (CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
+set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
 
 ## the RPATH to be used when installing, but only if it's not a system directory
 #LIST(FIND CMAKE_PLATFORM_IMPLICIT_LINK_DIRECTORIES "${CMAKE_INSTALL_PREFIX}/lib" isSystemDir)
 #IF("${isSystemDir}" STREQUAL "-1")
-   #SET(CMAKE_INSTALL_RPATH "${CMAKE_INSTALL_PREFIX}/lib")
+#SET(CMAKE_INSTALL_RPATH "${CMAKE_INSTALL_PREFIX}/lib")
 #ENDIF("${isSystemDir}" STREQUAL "-1")
 
 find_package (PkgConfig REQUIRED)
@@ -40,59 +44,59 @@ endif()
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake/Modules/")
 
 if((CMAKE_SIZEOF_VOID_P EQUAL 8) OR (CMAKE_CXX_COMPILER_ID MATCHES "SunPro"))
-  set(IS64BIT 1)
-  message("Generating 64bit code")
+	set(IS64BIT 1)
+	message("Generating 64bit code")
 else()
-  message("Generating 32bit code")
+	message("Generating 32bit code")
 endif()
 
 set(WITH_CONCPP $ENV{WITH_CONCPP} CACHE PATH
-  "MySQL Connector/C++ 8.0 install location"
-)
+	"MySQL Connector/C++ 8.0 install location"
+	)
 
 set(CONCPP_INCLUDE_DIR $ENV{CONCPP_INCLUDE_DIR} CACHE PATH
-  "Location of Connector/C++ 8.0 headers"
-)
+	"Location of Connector/C++ 8.0 headers"
+	)
 
 set(CONCPP_LIB_DIR $ENV{CONCPP_LIB_DIR} CACHE PATH
-  "Location of Connector/C++ 8.0 libraries"
-)
+	"Location of Connector/C++ 8.0 libraries"
+	)
 
 # Set include and library paths if not given
-if(NOT WITH_CONCPP AND UNIX)
+if(NOT WITH_CONCPP AND LINUX)
 	set(WITH_CONCPP "/usr")
 endif()
 
 if(WITH_CONCPP)
-  if(NOT CONCPP_INCLUDE_DIR)
-	  if(UNIX)
-     set(CONCPP_INCLUDE_DIR "${WITH_CONCPP}/include/mysql-cppconn-8")
-	  else()
-     set(CONCPP_INCLUDE_DIR "${WITH_CONCPP}/include")
+	if(NOT CONCPP_INCLUDE_DIR)
+		if(LINUX)
+			set(CONCPP_INCLUDE_DIR "${WITH_CONCPP}/include/mysql-cppconn-8")
+		else()
+			set(CONCPP_INCLUDE_DIR "${WITH_CONCPP}/include")
+		endif()
 	endif()
-  endif()
-  if(NOT CONCPP_LIB_DIR)
-	  if(IS64BIT AND NOT UNIX)
-      set(CONCPP_LIB_DIR "${WITH_CONCPP}/lib64")
-    else()
-      set(CONCPP_LIB_DIR "${WITH_CONCPP}/lib")
-    endif()
-  endif()
+	if(NOT CONCPP_LIB_DIR)
+		if(IS64BIT AND NOT LINUX)
+			set(CONCPP_LIB_DIR "${WITH_CONCPP}/lib64")
+		else()
+			set(CONCPP_LIB_DIR "${WITH_CONCPP}/lib")
+		endif()
+	endif()
 endif()
 
 if(NOT CONCPP_INCLUDE_DIR OR NOT CONCPP_LIB_DIR)
-  message(FATAL_ERROR
-    "This project requires MySQL Connector/C++ 8.0, please specify install location"
-    " using WITH_CONCPP setting or set header/library paths with CONCPP_INCLUDE_DIR"
-    " and CONCPP_LIB_DIR settings."
-  )
+	message(FATAL_ERROR
+		"This project requires MySQL Connector/C++ 8.0, please specify install location"
+		" using WITH_CONCPP setting or set header/library paths with CONCPP_INCLUDE_DIR"
+		" and CONCPP_LIB_DIR settings."
+		)
 endif()
 
 if(NOT EXISTS "${CONCPP_INCLUDE_DIR}/mysqlx/xdevapi.h")
-  message(FATAL_ERROR
-    "Could not find MySQL Connector/C++ 8.0 headers at specified"
-    " location: ${CONCPP_INCLUDE_DIR}"
-  )
+	message(FATAL_ERROR
+		"Could not find MySQL Connector/C++ 8.0 headers at specified"
+		" location: ${CONCPP_INCLUDE_DIR}"
+		)
 endif()
 
 set(CONCPP_LIBS
@@ -102,8 +106,8 @@ set(CONCPP_LIBS
 	)
 
 #set(CONCPP_JDBC_LIBS
-	#optimized mysqlcppconn
-	#)
+#optimized mysqlcppconn
+#)
 
 
 find_package(Threads REQUIRED)
@@ -121,25 +125,25 @@ set(CMAKE_CXX_STANDARD 17) # cmake 3.1 supports '" 98', '11' or '14'. cmake 3.8 
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 if(DBPHD_SANITIZE)
-  set(CMAKE_CXX_FLAGS "-fsanitize=address -fsanitize=undefined ${CMAKE_CXX_FLAGS}")
+	set(CMAKE_CXX_FLAGS "-fsanitize=address -fsanitize=undefined ${CMAKE_CXX_FLAGS}")
 endif()
 
 add_subdirectory(src)
 
 if(DBPHD_TEST)
-  enable_testing()
-  add_subdirectory(test)
+	enable_testing()
+	add_subdirectory(test)
 endif()
 
 if(DBPHD_BENCH)
-  add_subdirectory(bench)
+	add_subdirectory(bench)
 endif()
 
 if( EXISTS "${CMAKE_CURRENT_BINARY_DIR}/compile_commands.json" )
-  execute_process( COMMAND ${CMAKE_COMMAND} -E copy_if_different
-    ${CMAKE_CURRENT_BINARY_DIR}/compile_commands.json
-    ${CMAKE_CURRENT_SOURCE_DIR}/compile_commands.json
-  )
+	execute_process( COMMAND ${CMAKE_COMMAND} -E copy_if_different
+		${CMAKE_CURRENT_BINARY_DIR}/compile_commands.json
+		${CMAKE_CURRENT_SOURCE_DIR}/compile_commands.json
+		)
 endif()
 
 message(STATUS "")
