@@ -904,4 +904,4 @@ static void BM_MYSQL_Read_Join_Transact(benchmark::State& state) {
 	state.counters.insert({{"Indexes", benchmark::Counter(state.range(0), benchmark::Counter::kAvgThreads)}, {"Limit", benchmark::Counter(state.range(1), benchmark::Counter::kAvgThreads)}});
 }
 
-BENCHMARK(BM_MYSQL_Read_Join)->Apply(CustomArgumentsInserts5)->Complexity()->DenseThreadRange(1,4);
+BENCHMARK(BM_MYSQL_Read_Join_Transact)->Apply(CustomArgumentsInserts5)->Complexity()->DenseThreadRange(1,4);

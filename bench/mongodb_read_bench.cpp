@@ -849,8 +849,12 @@ static void BM_MONGO_Read_Join(benchmark::State& state) {
 		pipe.unwind("$match");
 		pipe.limit(state.range(1));
 
+		mongocxx::options::aggregate options;
+		options.batch_size(INT32_MAX);
+		options.allow_disk_use(true);
+		options.bypass_document_validation(true);
 		state.ResumeTiming();
-		auto result = collection.aggregate(session, pipe);
+		auto result = collection.aggregate(session, pipe, options);
 
 		for(auto i : result) {
 			++count;
@@ -930,9 +934,13 @@ static void BM_MONGO_Read_Join_Transact(benchmark::State& state) {
 		pipe.unwind("$match");
 		pipe.limit(state.range(1));
 
+		mongocxx::options::aggregate options;
+		options.batch_size(INT32_MAX);
+		options.allow_disk_use(true);
+		options.bypass_document_validation(true);
 		state.ResumeTiming();
 		session.start_transaction();
-		auto result = collection.aggregate(session, pipe);
+		auto result = collection.aggregate(session, pipe, options);
 
 		for(auto i : result) {
 			++count;
