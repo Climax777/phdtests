@@ -2,6 +2,13 @@
 #include "dbphd/mongodb/mongodb.hpp"
 using bsoncxx::builder::basic::kvp;
 using bsoncxx::builder::basic::make_document;
+//TODO
+//  1	Update testing based on number of documents to change
+//  2	Update testing based on number of fields to change
+//  3	Update testing based on number of indexed fields
+//  4	Update testing based on subquery 
+//  5	Update testing based on adding fields
+//  6	Update testing based on removing fields
 
 /*static void BM_MONGO_Select(benchmark::State& state) {
 	auto conn = MongoDBHandler::GetConnection();
