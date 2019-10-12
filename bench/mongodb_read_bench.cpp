@@ -1008,8 +1008,10 @@ static void BM_MONGO_Read_Join_Manual(benchmark::State& state) {
 	uint64_t count = 0;
 	for(auto _ : state) {
 		state.PauseTiming();
-		vector<bsoncxx::document::view> batch(state.range(2));
-		vector<pair<bsoncxx::document::view, vector<bsoncxx::document::view>>> results(state.range(1));
+		vector<bsoncxx::document::view> batch;
+		batch.reserve(state.range(2));
+		vector<pair<bsoncxx::document::view, vector<bsoncxx::document::view>>> results;
+		results.reserve(state.range(1));
 		state.ResumeTiming();
 		mongocxx::options::find opts;
 		opts.limit(state.range(1));
@@ -1023,15 +1025,15 @@ static void BM_MONGO_Read_Join_Manual(benchmark::State& state) {
 				for(auto querydoc : batch) {
 					vector<bsoncxx::document::view> a;
 					results.push_back(make_pair(querydoc, a));
-					partial = partial << bsoncxx::builder::stream::open_document << "$and" << bsoncxx::builder::stream::open_array << bsoncxx::builder::stream::open_document << "a1" << querydoc["a0"].get_int64() << bsoncxx::builder::stream::close_document << bsoncxx::builder::stream::open_document << "_id"  << bsoncxx::builder::stream::open_document << "$ne" << querydoc["_id"].get_oid() << bsoncxx::builder::stream::close_document << bsoncxx::builder::stream::close_document << bsoncxx::builder::stream::close_array << bsoncxx::builder::stream::close_document;
+					partial = partial << bsoncxx::builder::stream::open_document << "$and" << bsoncxx::builder::stream::open_array << bsoncxx::builder::stream::open_document << "a1" << querydoc["a0"].get_int32() << bsoncxx::builder::stream::close_document << bsoncxx::builder::stream::open_document << "_id"  << bsoncxx::builder::stream::open_document << "$ne" << querydoc["_id"].get_int32() << bsoncxx::builder::stream::close_document << bsoncxx::builder::stream::close_document << bsoncxx::builder::stream::close_array << bsoncxx::builder::stream::close_document;
 				} 
 				mongocxx::options::find opts;
 				opts.limit(state.range(1));
 				auto afterin = partial << bsoncxx::builder::stream::close_array;
 				auto cursorinternal = collection.find(session, afterin << bsoncxx::builder::stream::finalize, opts);
-				for(auto doc : cursor) {
+				for(auto doc : cursorinternal) {
 					for(auto res: results) {
-						if(res.first["a0"].get_int64() == doc["a0"].get_int64()) {
+						if(res.first["a0"].get_value() == doc["a0"].get_value()) {
 							res.second.push_back(doc);
 							++count;
 							break;
@@ -1096,8 +1098,10 @@ static void BM_MONGO_Read_Join_Manual_Transact(benchmark::State& state) {
 	uint64_t count = 0;
 	for(auto _ : state) {
 		state.PauseTiming();
-		vector<bsoncxx::document::view> batch(state.range(2));
-		vector<pair<bsoncxx::document::view, vector<bsoncxx::document::view>>> results(state.range(1));
+		vector<bsoncxx::document::view> batch;
+		batch.reserve(state.range(2));
+		vector<pair<bsoncxx::document::view, vector<bsoncxx::document::view>>> results;
+		results.reserve(state.range(1));
 		state.ResumeTiming();
 		session.start_transaction();
 		mongocxx::options::find opts;
@@ -1112,15 +1116,15 @@ static void BM_MONGO_Read_Join_Manual_Transact(benchmark::State& state) {
 				for(auto querydoc : batch) {
 					vector<bsoncxx::document::view> a;
 					results.push_back(make_pair(querydoc, a));
-					partial = partial << bsoncxx::builder::stream::open_document << "$and" << bsoncxx::builder::stream::open_array << bsoncxx::builder::stream::open_document << "a1" << querydoc["a0"].get_int64() << bsoncxx::builder::stream::close_document << bsoncxx::builder::stream::open_document << "_id"  << bsoncxx::builder::stream::open_document << "$ne" << querydoc["_id"].get_oid() << bsoncxx::builder::stream::close_document << bsoncxx::builder::stream::close_document << bsoncxx::builder::stream::close_array << bsoncxx::builder::stream::close_document;
+					partial = partial << bsoncxx::builder::stream::open_document << "$and" << bsoncxx::builder::stream::open_array << bsoncxx::builder::stream::open_document << "a1" << querydoc["a0"].get_int32() << bsoncxx::builder::stream::close_document << bsoncxx::builder::stream::open_document << "_id"  << bsoncxx::builder::stream::open_document << "$ne" << querydoc["_id"].get_int32() << bsoncxx::builder::stream::close_document << bsoncxx::builder::stream::close_document << bsoncxx::builder::stream::close_array << bsoncxx::builder::stream::close_document;
 				} 
 				mongocxx::options::find opts;
 				opts.limit(state.range(1));
 				auto afterin = partial << bsoncxx::builder::stream::close_array;
 				auto cursorinternal = collection.find(session, afterin << bsoncxx::builder::stream::finalize, opts);
-				for(auto doc : cursor) {
+				for(auto doc : cursorinternal) {
 					for(auto res: results) {
-						if(res.first["a0"].get_int64() == doc["a0"].get_int64()) {
+						if(res.first["a0"].get_value() == doc["a0"].get_value()) {
 							res.second.push_back(doc);
 							++count;
 							break;
