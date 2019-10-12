@@ -52,6 +52,16 @@ static void CustomArgumentsInserts5(benchmark::internal::Benchmark* b) {
 	}
 }
 
+static void CustomArgumentsInserts6(benchmark::internal::Benchmark* b) {
+	for (int i = 0; i <= 2; ++i) { // fields to index
+		for(int j = 1; j <= (int)pow(Precalculator::Values,Precalculator::Columns); j *= 2) { // Documents to return
+			for(int k = 1; k <= j; k *= 2) { // Documents to query for batch
+				b->Args({i, j, k});
+			}
+		}
+	}
+}
+
 static void CreateTable(mysqlx::Session &conn) {
 	static volatile bool created = false;
 	if(!created) {
@@ -905,3 +915,188 @@ static void BM_MYSQL_Read_Join_Transact(benchmark::State& state) {
 }
 
 BENCHMARK(BM_MYSQL_Read_Join_Transact)->Apply(CustomArgumentsInserts5)->Complexity()->DenseThreadRange(1,4);
+
+static void BM_MYSQL_Read_Join_Manual(benchmark::State& state) {
+	auto conn = MySQLDBHandler::GetConnection();	
+	std::random_device rd;  //Will be used to obtain a seed for the random number engine
+	std::mt19937 gen(rd()); //Standard mersenne_twister_engine seeded with rd()
+	std::uniform_int_distribution<> dis(0, 4);
+	// Per thread settings...
+	if(state.thread_index == 0) {
+		// This is the first thread, so do initialization here, build indexes etc...
+		CreateTable(conn);
+		try {
+			conn.sql("DROP INDEX idx ON bench.read_bench;").execute();
+		}catch(...) {
+		}
+		for(int index = 0; index < state.range(0); ++index) {
+			string indexCreate = "CREATE INDEX idx on bench.read_bench a" + to_string(index) + " ALGORITHM INPLACE;";
+			conn.sql(indexCreate).execute();
+		}
+	}
+	auto db = conn.getSchema("bench");
+	uint64_t count = 0;
+	for(auto _ : state) {
+		state.PauseTiming();
+		string selectclause = "SELECT *";
+		string query = selectclause + " FROM bench.read_bench";
+		query += " LIMIT " + to_string(state.range(1));
+		query += ";";
+		vector<mysqlx::Row> batch;
+		batch.reserve(state.range(2));
+		vector<pair<mysqlx::Row, vector<mysqlx::Row>>> results;
+		results.reserve(state.range(1));
+		state.ResumeTiming();
+
+		auto res = conn.sql(query).execute();
+		for(auto i: res) {
+			batch.push_back(i);
+			// Our batch is ready...
+			if(batch.size() == state.range(2)) {
+				string selectclause = "SELECT *";
+				string query = selectclause + " FROM bench.read_bench WHERE	";
+				bool first = true;
+				for(auto querydoc: batch) {
+					vector<mysqlx::Row> a;
+					results.push_back(make_pair(querydoc, a));
+					if(!first)
+						query += " OR ";
+					query += " (a1 = " + to_string(querydoc.get(1).get<uint32_t>()) + " AND _id != " + to_string(querydoc.get(0).get<uint32_t>());
+					query += ") ";
+					first = false;
+				}
+				query += " LIMIT " + to_string(state.range(1));
+				query += ";";
+				auto cursorinternal = conn.sql(query).execute();
+				for(auto row: cursorinternal) {
+					for(auto res: results) {
+						if(res.first.get(1).get<uint32_t>() == row.get(0).get<uint32_t>()) {
+							res.second.push_back(row);
+							++count;
+							break;
+						}
+					}
+					if(count >= state.range(1))
+						break;
+				}
+				batch.clear();
+			}
+			if(count >= state.range(1))
+				break;
+		}
+	}
+
+	if(state.thread_index == 0) {
+		//PostgreSQLDBHandler::DropTable(conn, "bench", "create_bench");
+		// This is the first thread, so do destruction here (delete documents etc..)
+	}
+	state.SetComplexityN(state.range(1));
+
+	state.SetItemsProcessed(state.range(1)*state.iterations());
+
+	// Set the counter as a rate. It will be presented divided
+	// by the duration of the benchmark.
+	// Meaning: per one second, how many 'foo's are processed?
+	state.counters["Ops"] = benchmark::Counter(state.iterations(), benchmark::Counter::kIsRate);
+
+	// Set the counter as a rate. It will be presented divided
+	// by the duration of the benchmark, and the result inverted.
+	// Meaning: how many seconds it takes to process one 'foo'?
+	state.counters["OpsInv"] = benchmark::Counter(state.iterations(), benchmark::Counter::kIsRate | benchmark::Counter::kInvert);
+	state.counters.insert({{"Indexes", benchmark::Counter(state.range(0), benchmark::Counter::kAvgThreads)}, {"Limit", benchmark::Counter(state.range(1), benchmark::Counter::kAvgThreads)}, {"Batch", benchmark::Counter(state.range(2), benchmark::Counter::kAvgThreads)}});
+}
+
+BENCHMARK(BM_MYSQL_Read_Join_Manual)->Apply(CustomArgumentsInserts6)->Complexity()->DenseThreadRange(1,4);
+
+static void BM_MYSQL_Read_Join_Manual_Transact(benchmark::State& state) {
+	auto conn = MySQLDBHandler::GetConnection();	
+	std::random_device rd;  //Will be used to obtain a seed for the random number engine
+	std::mt19937 gen(rd()); //Standard mersenne_twister_engine seeded with rd()
+	std::uniform_int_distribution<> dis(0, 4);
+	// Per thread settings...
+	if(state.thread_index == 0) {
+		// This is the first thread, so do initialization here, build indexes etc...
+		CreateTable(conn);
+		try {
+			conn.sql("DROP INDEX idx ON bench.read_bench;").execute();
+		}catch(...) {
+		}
+		for(int index = 0; index < state.range(0); ++index) {
+			string indexCreate = "CREATE INDEX idx on bench.read_bench a" + to_string(index) + " ALGORITHM INPLACE;";
+			conn.sql(indexCreate).execute();
+		}
+	}
+	auto db = conn.getSchema("bench");
+	uint64_t count = 0;
+	for(auto _ : state) {
+		state.PauseTiming();
+		string selectclause = "SELECT *";
+		string query = selectclause + " FROM bench.read_bench";
+		query += " LIMIT " + to_string(state.range(1));
+		query += ";";
+		vector<mysqlx::Row> batch;
+		batch.reserve(state.range(2));
+		vector<pair<mysqlx::Row, vector<mysqlx::Row>>> results;
+		results.reserve(state.range(1));
+		state.ResumeTiming();
+		conn.startTransaction();
+		auto res = conn.sql(query).execute();
+		for(auto i: res) {
+			batch.push_back(i);
+			// Our batch is ready...
+			if(batch.size() == state.range(2)) {
+				string selectclause = "SELECT *";
+				string query = selectclause + " FROM bench.read_bench WHERE	";
+				bool first = true;
+				for(auto querydoc: batch) {
+					vector<mysqlx::Row> a;
+					results.push_back(make_pair(querydoc, a));
+					if(!first)
+						query += " OR ";
+					query += " (a1 = " + to_string(querydoc.get(1).get<uint32_t>()) + " AND _id != " + to_string(querydoc.get(0).get<uint32_t>());
+					query += ") ";
+					first = false;
+				}
+				query += " LIMIT " + to_string(state.range(1));
+				query += ";";
+				auto cursorinternal = conn.sql(query).execute();
+				for(auto row: cursorinternal) {
+					for(auto res: results) {
+						if(res.first.get(1).get<uint32_t>() == row.get(0).get<uint32_t>()) {
+							res.second.push_back(row);
+							++count;
+							break;
+						}
+					}
+					if(count >= state.range(1))
+						break;
+				}
+				batch.clear();
+			}
+			if(count >= state.range(1))
+				break;
+		}
+		conn.commit();
+	}
+
+	if(state.thread_index == 0) {
+		//PostgreSQLDBHandler::DropTable(conn, "bench", "create_bench");
+		// This is the first thread, so do destruction here (delete documents etc..)
+	}
+	state.SetComplexityN(state.range(1));
+
+	state.SetItemsProcessed(state.range(1)*state.iterations());
+
+	// Set the counter as a rate. It will be presented divided
+	// by the duration of the benchmark.
+	// Meaning: per one second, how many 'foo's are processed?
+	state.counters["Ops"] = benchmark::Counter(state.iterations(), benchmark::Counter::kIsRate);
+
+	// Set the counter as a rate. It will be presented divided
+	// by the duration of the benchmark, and the result inverted.
+	// Meaning: how many seconds it takes to process one 'foo'?
+	state.counters["OpsInv"] = benchmark::Counter(state.iterations(), benchmark::Counter::kIsRate | benchmark::Counter::kInvert);
+	state.counters.insert({{"Indexes", benchmark::Counter(state.range(0), benchmark::Counter::kAvgThreads)}, {"Limit", benchmark::Counter(state.range(1), benchmark::Counter::kAvgThreads)}, {"Batch", benchmark::Counter(state.range(2), benchmark::Counter::kAvgThreads)}});
+}
+
+BENCHMARK(BM_MYSQL_Read_Join_Manual_Transact)->Apply(CustomArgumentsInserts6)->Complexity()->DenseThreadRange(1,4);
