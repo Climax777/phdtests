@@ -69,7 +69,7 @@ CREATE TABLE create_bench (
 			if(n != state.range(0)-1) {
 				query.append("),");
 			} else {
-				query.append(");");
+				query.append(");"); // RETURNING _id // Technically to make it more fair, pqxx should return the id's of the inserteds
 			}
 		}
 		state.ResumeTiming();
