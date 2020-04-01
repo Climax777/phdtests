@@ -19,6 +19,7 @@
 // *	Manual Join Done
 // *	Skip Not really more impactful than just returning the document
 // *	Range queries // This is implicitly the same as fixing one and leaving the rest of the columns >= 0 ???
+// *	Count queries // This is to test query speed, rather than data transfer speed TODO
 
 using namespace std;
 using bsoncxx::builder::basic::kvp;
