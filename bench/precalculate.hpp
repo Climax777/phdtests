@@ -7,7 +7,7 @@
 class Precalculator {
 public:
 	static std::vector<std::vector<int>> PrecalcValues;
-	static bool PreCalculated;
+	static volatile bool PreCalculated;
 	static uint64_t Rows;
 	static int Values;
 	static int Columns;

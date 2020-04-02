@@ -5,7 +5,7 @@
 //TODO
 //	1	Delete testing based on size of document (number of fields)
 //	2	Delete testing based on number of indexes
-//	3	Delete testing based on number of indexes vs number of fields queried (single) (should correlate to find + delete)
+//	3	Delete testing based on number of indexes vs number of fields queried (single) (should correlate to find/count + delete)
 //	4	Delete of all documents, based on #indexes
 /*
 using namespace std;
