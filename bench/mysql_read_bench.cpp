@@ -108,7 +108,7 @@ CREATE TABLE read_bench (
 	created = true;
 }
 
-static void BM_MYSQL_Read_Count(benchmark::State& state) {
+static void BM_MYSQL_Read_Count(benchmark::State& state, bool transactions) {
 	auto conn = MySQLDBHandler::GetConnection();	
 	std::random_device rd;  //Will be used to obtain a seed for the random number engine
 	std::mt19937 gen(rd()); //Standard mersenne_twister_engine seeded with rd()
@@ -144,8 +144,22 @@ static void BM_MYSQL_Read_Count(benchmark::State& state) {
 			tableSelect.where(whereclause);
 		}
 		state.ResumeTiming();
+		auto start = std::chrono::high_resolution_clock::now();
+		if(transactions) {
+			conn.startTransaction();
+		}
 		auto result = tableSelect.execute().fetchOne();
 		count += result.get(0).get<uint64_t>();
+		if(transactions) {
+			conn.commit();
+		}
+		auto end = std::chrono::high_resolution_clock::now();
+
+		auto elapsed_seconds =
+			std::chrono::duration_cast<std::chrono::duration<double>>(
+					end - start);
+
+		state.SetIterationTime(elapsed_seconds.count());
 	}
 
 	if(state.thread_index == 0) {
@@ -167,73 +181,10 @@ static void BM_MYSQL_Read_Count(benchmark::State& state) {
 	state.counters.insert({{"Fields", benchmark::Counter(state.range(0), benchmark::Counter::kAvgThreads)}, {"Indexes", benchmark::Counter(state.range(1), benchmark::Counter::kAvgThreads)}});
 }
 
-BENCHMARK(BM_MYSQL_Read_Count)->Apply(CustomArgumentsInserts)->Complexity()->DenseThreadRange(1,4);
+BENCHMARK_CAPTURE(BM_MYSQL_Read_Count, Normal, false)->Apply(CustomArgumentsInserts)->Complexity()->DenseThreadRange(1, 8, 2)->UseManualTime();
+BENCHMARK_CAPTURE(BM_MYSQL_Read_Count, Transact, true)->Apply(CustomArgumentsInserts)->Complexity()->DenseThreadRange(1, 8, 2)->UseManualTime();
 
-static void BM_MYSQL_Read_Count_Transact(benchmark::State& state) {
-	auto conn = MySQLDBHandler::GetConnection();	
-	std::random_device rd;  //Will be used to obtain a seed for the random number engine
-	std::mt19937 gen(rd()); //Standard mersenne_twister_engine seeded with rd()
-	std::uniform_int_distribution<> dis(0, 4);
-	// Per thread settings...
-	if(state.thread_index == 0) {
-		// This is the first thread, so do initialization here, build indexes etc...
-		CreateTable(conn);
-		try {
-			conn.sql("DROP INDEX idx ON bench.read_bench;").execute();
-		}catch(...) {
-		}
-		if(state.range(1) > 0) {
-			string indexCreate = "CREATE INDEX idx on bench.read_bench (a0";
-			for(int index = 1; index < state.range(1); ++index) {
-				indexCreate += ",a" + to_string(index);
-			}
-			indexCreate += ") ALGORITHM INPLACE;";
-			conn.sql(indexCreate).execute();
-		}
-	}
-	auto db = conn.getSchema("bench");
-	auto table = db.getTable("read_bench");
-	uint64_t count = 0;
-	for(auto _ : state) {
-		state.PauseTiming();
-		auto tableSelect = table.select("COUNT(*)");
-		if(state.range(0) > 0) {
-			string whereclause = "a0 = " + to_string(dis(gen));
-			for(int n = 1; n < state.range(0); ++n) {
-				whereclause += " AND a" + to_string(n) + " = " + to_string(dis(gen));
-			}
-			tableSelect.where(whereclause);
-		}
-		state.ResumeTiming();
-		conn.startTransaction();
-		auto result = tableSelect.execute().fetchOne();
-		count += result.get(0).get<uint64_t>();
-		conn.commit();
-	}
-
-	if(state.thread_index == 0) {
-		//MySQLDBHandler::DropTable(conn, "bench", "create_bench");
-		// This is the first thread, so do destruction here (delete documents etc..)
-	}
-
-	state.SetItemsProcessed(count);
-
-	// Set the counter as a rate. It will be presented divided
-	// by the duration of the benchmark.
-	// Meaning: per one second, how many 'foo's are processed?
-	state.counters["Ops"] = benchmark::Counter(state.iterations(), benchmark::Counter::kIsRate);
-
-	// Set the counter as a rate. It will be presented divided
-	// by the duration of the benchmark, and the result inverted.
-	// Meaning: how many seconds it takes to process one 'foo'?
-	state.counters["OpsInv"] = benchmark::Counter(state.iterations(), benchmark::Counter::kIsRate | benchmark::Counter::kInvert);
-	state.counters.insert({{"Fields", benchmark::Counter(state.range(0), benchmark::Counter::kAvgThreads)}, {"Indexes", benchmark::Counter(state.range(1), benchmark::Counter::kAvgThreads)}});
-
-}
-
-BENCHMARK(BM_MYSQL_Read_Count_Transact)->Apply(CustomArgumentsInserts)->Complexity()->DenseThreadRange(1,4);
-
-static void BM_MYSQL_Reads(benchmark::State& state) {
+static void BM_MYSQL_Reads(benchmark::State& state, bool transactions) {
 	auto conn = MySQLDBHandler::GetConnection();	
 	std::random_device rd;  //Will be used to obtain a seed for the random number engine
 	std::mt19937 gen(rd()); //Standard mersenne_twister_engine seeded with rd()
@@ -275,10 +226,24 @@ static void BM_MYSQL_Reads(benchmark::State& state) {
 		}
 		tableSelect.limit(state.range(3));
 		state.ResumeTiming();
+		auto start = std::chrono::high_resolution_clock::now();
+		if(transactions) {
+			conn.startTransaction();
+		}
 		std::list<mysqlx::Row> result = tableSelect.execute().fetchAll();
 		for(auto res: result) {
 			++count;
 		}
+		if(transactions) {
+			conn.commit();
+		}
+		auto end = std::chrono::high_resolution_clock::now();
+
+		auto elapsed_seconds =
+			std::chrono::duration_cast<std::chrono::duration<double>>(
+					end - start);
+
+		state.SetIterationTime(elapsed_seconds.count());
 	}
 
 	if(state.thread_index == 0) {
@@ -300,79 +265,10 @@ static void BM_MYSQL_Reads(benchmark::State& state) {
 	state.counters.insert({{"Fields", benchmark::Counter(state.range(0), benchmark::Counter::kAvgThreads)}, {"FieldsProj", benchmark::Counter(state.range(1), benchmark::Counter::kAvgThreads)}, {"Indexes", benchmark::Counter(state.range(2), benchmark::Counter::kAvgThreads)}, {"Limit", benchmark::Counter(state.range(3), benchmark::Counter::kAvgThreads)}});
 }
 
-BENCHMARK(BM_MYSQL_Reads)->Apply(CustomArgumentsInserts2)->Complexity()->DenseThreadRange(1,4);
+BENCHMARK_CAPTURE(BM_MYSQL_Reads, Normal, false)->Apply(CustomArgumentsInserts2)->Complexity()->DenseThreadRange(1, 8, 2)->UseManualTime();
+BENCHMARK_CAPTURE(BM_MYSQL_Reads, Transact, true)->Apply(CustomArgumentsInserts2)->Complexity()->DenseThreadRange(1, 8, 2)->UseManualTime();
 
-static void BM_MYSQL_Reads_Transact(benchmark::State& state) {
-	auto conn = MySQLDBHandler::GetConnection();	
-	std::random_device rd;  //Will be used to obtain a seed for the random number engine
-	std::mt19937 gen(rd()); //Standard mersenne_twister_engine seeded with rd()
-	std::uniform_int_distribution<> dis(0, 4);
-	// Per thread settings...
-	if(state.thread_index == 0) {
-		// This is the first thread, so do initialization here, build indexes etc...
-		CreateTable(conn);
-		try {
-			conn.sql("DROP INDEX idx ON bench.read_bench;").execute();
-		}catch(...) {
-		}
-		if(state.range(2) > 0) {
-			string indexCreate = "CREATE INDEX idx on bench.read_bench (a0";
-			for(int index = 1; index < state.range(2); ++index) {
-				indexCreate += ",a" + to_string(index);
-			}
-			indexCreate += ") ALGORITHM INPLACE;";
-			conn.sql(indexCreate).execute();
-		}
-	}
-	auto db = conn.getSchema("bench");
-	auto table = db.getTable("read_bench");
-	uint64_t count = 0;
-	for(auto _ : state) {
-		state.PauseTiming();
-		std::list<string> selectclause = {"_id"};
-		for(int i = 0; i < state.range(1); ++i) {
-			selectclause.push_back("a" + to_string(i));
-		}
-		auto tableSelect = table.select(selectclause);
-		if(state.range(0) > 0) {
-			string whereclause = "a0 = " + to_string(dis(gen));
-			for(int n = 1; n < state.range(0); ++n) {
-				whereclause += " AND a" + to_string(n) + " = " + to_string(dis(gen));
-			}
-			tableSelect.where(whereclause);
-		}
-		tableSelect.limit(state.range(3));
-		state.ResumeTiming();
-		conn.startTransaction();
-		std::list<mysqlx::Row> result = tableSelect.execute().fetchAll();
-		for(auto res: result) {
-			++count;
-		}
-		conn.commit();
-	}
-
-	if(state.thread_index == 0) {
-		//MySQLDBHandler::DropTable(conn, "bench", "create_bench");
-		// This is the first thread, so do destruction here (delete documents etc..)
-	}
-
-	state.SetItemsProcessed(count);
-
-	// Set the counter as a rate. It will be presented divided
-	// by the duration of the benchmark.
-	// Meaning: per one second, how many 'foo's are processed?
-	state.counters["Ops"] = benchmark::Counter(state.iterations(), benchmark::Counter::kIsRate);
-
-	// Set the counter as a rate. It will be presented divided
-	// by the duration of the benchmark, and the result inverted.
-	// Meaning: how many seconds it takes to process one 'foo'?
-	state.counters["OpsInv"] = benchmark::Counter(state.iterations(), benchmark::Counter::kIsRate | benchmark::Counter::kInvert);
-	state.counters.insert({{"Fields", benchmark::Counter(state.range(0), benchmark::Counter::kAvgThreads)}, {"FieldsProj", benchmark::Counter(state.range(1), benchmark::Counter::kAvgThreads)}, {"Indexes", benchmark::Counter(state.range(2), benchmark::Counter::kAvgThreads)}, {"Limit", benchmark::Counter(state.range(3), benchmark::Counter::kAvgThreads)}});
-}
-
-BENCHMARK(BM_MYSQL_Reads_Transact)->Apply(CustomArgumentsInserts2)->Complexity()->DenseThreadRange(1,4);
-
-static void BM_MYSQL_Read_Sum(benchmark::State& state) {
+static void BM_MYSQL_Read_Sum(benchmark::State& state, bool transactions) {
 	auto conn = MySQLDBHandler::GetConnection();	
 	std::random_device rd;  //Will be used to obtain a seed for the random number engine
 	std::mt19937 gen(rd()); //Standard mersenne_twister_engine seeded with rd()
@@ -395,9 +291,23 @@ static void BM_MYSQL_Read_Sum(benchmark::State& state) {
 		query += " LIMIT " + to_string(state.range(0));
 		query += ") new;";
 		state.ResumeTiming();
+		auto start = std::chrono::high_resolution_clock::now();
+		if(transactions) {
+			conn.startTransaction();
+		}
 		std::list<mysqlx::Row> result = conn.sql(query).execute().fetchAll();
 		for(auto res: result) {
 		}
+		if(transactions) {
+			conn.commit();
+		}
+		auto end = std::chrono::high_resolution_clock::now();
+
+		auto elapsed_seconds =
+			std::chrono::duration_cast<std::chrono::duration<double>>(
+					end - start);
+
+		state.SetIterationTime(elapsed_seconds.count());
 	}
 
 	if(state.thread_index == 0) {
@@ -419,60 +329,10 @@ static void BM_MYSQL_Read_Sum(benchmark::State& state) {
 	state.counters["OpsInv"] = benchmark::Counter(state.iterations(), benchmark::Counter::kIsRate | benchmark::Counter::kInvert);
 }
 
-BENCHMARK(BM_MYSQL_Read_Sum)->Apply(CustomArgumentsInserts3)->Complexity()->DenseThreadRange(1,4);
+BENCHMARK_CAPTURE(BM_MYSQL_Read_Sum, Normal, false)->Apply(CustomArgumentsInserts3)->Complexity()->DenseThreadRange(1, 8, 2)->UseManualTime();
+BENCHMARK_CAPTURE(BM_MYSQL_Read_Sum, Transact, true)->Apply(CustomArgumentsInserts3)->Complexity()->DenseThreadRange(1, 8, 2)->UseManualTime();
 
-static void BM_MYSQL_Read_Sum_Transact(benchmark::State& state) {
-	auto conn = MySQLDBHandler::GetConnection();	
-	std::random_device rd;  //Will be used to obtain a seed for the random number engine
-	std::mt19937 gen(rd()); //Standard mersenne_twister_engine seeded with rd()
-	std::uniform_int_distribution<> dis(0, 4);
-	// Per thread settings...
-	if(state.thread_index == 0) {
-		// This is the first thread, so do initialization here, build indexes etc...
-		CreateTable(conn);
-		try {
-			conn.sql("DROP INDEX idx ON bench.read_bench;").execute();
-		}catch(...) {
-		}
-	}
-	auto db = conn.getSchema("bench");
-	auto table = db.getTable("read_bench");
-	for(auto _ : state) {
-		state.PauseTiming();
-		string selectclause = "SELECT SUM(new.a0)";
-		string query = selectclause + " FROM (SELECT * FROM bench.read_bench";
-		query += " LIMIT " + to_string(state.range(0));
-		query += ") new;";
-		state.ResumeTiming();
-		conn.startTransaction();
-		std::list<mysqlx::Row> result = conn.sql(query).execute().fetchAll();
-		for(auto res: result) {
-		}
-		conn.commit();
-	}
-
-	if(state.thread_index == 0) {
-		//MySQLDBHandler::DropTable(conn, "bench", "create_bench");
-		// This is the first thread, so do destruction here (delete documents etc..)
-	}
-	state.SetComplexityN(state.range(0));
-
-	state.SetItemsProcessed(state.range(0)*state.iterations());
-
-	// Set the counter as a rate. It will be presented divided
-	// by the duration of the benchmark.
-	// Meaning: per one second, how many 'foo's are processed?
-	state.counters["Ops"] = benchmark::Counter(state.iterations(), benchmark::Counter::kIsRate);
-
-	// Set the counter as a rate. It will be presented divided
-	// by the duration of the benchmark, and the result inverted.
-	// Meaning: how many seconds it takes to process one 'foo'?
-	state.counters["OpsInv"] = benchmark::Counter(state.iterations(), benchmark::Counter::kIsRate | benchmark::Counter::kInvert);
-}
-
-BENCHMARK(BM_MYSQL_Read_Sum_Transact)->Apply(CustomArgumentsInserts3)->Complexity()->DenseThreadRange(1,4);
-
-static void BM_MYSQL_Read_Avg(benchmark::State& state) {
+static void BM_MYSQL_Read_Avg(benchmark::State& state, bool transactions) {
 	auto conn = MySQLDBHandler::GetConnection();	
 	std::random_device rd;  //Will be used to obtain a seed for the random number engine
 	std::mt19937 gen(rd()); //Standard mersenne_twister_engine seeded with rd()
@@ -495,9 +355,23 @@ static void BM_MYSQL_Read_Avg(benchmark::State& state) {
 		query += " LIMIT " + to_string(state.range(0));
 		query += ") new;";
 		state.ResumeTiming();
+		auto start = std::chrono::high_resolution_clock::now();
+		if(transactions) {
+			conn.startTransaction();
+		}
 		std::list<mysqlx::Row> result = conn.sql(query).execute().fetchAll();
 		for(auto res: result) {
 		}
+		if(transactions) {
+			conn.commit();
+		}
+		auto end = std::chrono::high_resolution_clock::now();
+
+		auto elapsed_seconds =
+			std::chrono::duration_cast<std::chrono::duration<double>>(
+					end - start);
+
+		state.SetIterationTime(elapsed_seconds.count());
 	}
 
 	if(state.thread_index == 0) {
@@ -519,60 +393,10 @@ static void BM_MYSQL_Read_Avg(benchmark::State& state) {
 	state.counters["OpsInv"] = benchmark::Counter(state.iterations(), benchmark::Counter::kIsRate | benchmark::Counter::kInvert);
 }
 
-BENCHMARK(BM_MYSQL_Read_Avg)->Apply(CustomArgumentsInserts3)->Complexity()->DenseThreadRange(1,4);
+BENCHMARK_CAPTURE(BM_MYSQL_Read_Avg, Normal, false)->Apply(CustomArgumentsInserts3)->Complexity()->DenseThreadRange(1, 8, 2)->UseManualTime();
+BENCHMARK_CAPTURE(BM_MYSQL_Read_Avg, Transact, true)->Apply(CustomArgumentsInserts3)->Complexity()->DenseThreadRange(1, 8, 2)->UseManualTime();
 
-static void BM_MYSQL_Read_Avg_Transact(benchmark::State& state) {
-	auto conn = MySQLDBHandler::GetConnection();	
-	std::random_device rd;  //Will be used to obtain a seed for the random number engine
-	std::mt19937 gen(rd()); //Standard mersenne_twister_engine seeded with rd()
-	std::uniform_int_distribution<> dis(0, 4);
-	// Per thread settings...
-	if(state.thread_index == 0) {
-		// This is the first thread, so do initialization here, build indexes etc...
-		CreateTable(conn);
-		try {
-			conn.sql("DROP INDEX idx ON bench.read_bench;").execute();
-		}catch(...) {
-		}
-	}
-	auto db = conn.getSchema("bench");
-	auto table = db.getTable("read_bench");
-	for(auto _ : state) {
-		state.PauseTiming();
-		string selectclause = "SELECT AVG(new.a0)";
-		string query = selectclause + " FROM (SELECT * FROM bench.read_bench";
-		query += " LIMIT " + to_string(state.range(0));
-		query += ") new;";
-		state.ResumeTiming();
-		conn.startTransaction();
-		std::list<mysqlx::Row> result = conn.sql(query).execute().fetchAll();
-		for(auto res: result) {
-		}
-		conn.commit();
-	}
-
-	if(state.thread_index == 0) {
-		//MySQLDBHandler::DropTable(conn, "bench", "create_bench");
-		// This is the first thread, so do destruction here (delete documents etc..)
-	}
-
-	state.SetComplexityN(state.range(0));
-	state.SetItemsProcessed(state.range(0)*state.iterations());
-
-	// Set the counter as a rate. It will be presented divided
-	// by the duration of the benchmark.
-	// Meaning: per one second, how many 'foo's are processed?
-	state.counters["Ops"] = benchmark::Counter(state.iterations(), benchmark::Counter::kIsRate);
-
-	// Set the counter as a rate. It will be presented divided
-	// by the duration of the benchmark, and the result inverted.
-	// Meaning: how many seconds it takes to process one 'foo'?
-	state.counters["OpsInv"] = benchmark::Counter(state.iterations(), benchmark::Counter::kIsRate | benchmark::Counter::kInvert);
-}
-
-BENCHMARK(BM_MYSQL_Read_Avg_Transact)->Apply(CustomArgumentsInserts3)->Complexity()->DenseThreadRange(1,4);
-
-static void BM_MYSQL_Read_Mul(benchmark::State& state) {
+static void BM_MYSQL_Read_Mul(benchmark::State& state, bool transactions) {
 	auto conn = MySQLDBHandler::GetConnection();	
 	std::random_device rd;  //Will be used to obtain a seed for the random number engine
 	std::mt19937 gen(rd()); //Standard mersenne_twister_engine seeded with rd()
@@ -594,9 +418,23 @@ static void BM_MYSQL_Read_Mul(benchmark::State& state) {
 		auto tableSelect = table.select(selectclause);
 		tableSelect.limit(state.range(0));
 		state.ResumeTiming();
+		auto start = std::chrono::high_resolution_clock::now();
+		if(transactions) {
+			conn.startTransaction();
+		}
 		std::list<mysqlx::Row> result = tableSelect.execute().fetchAll();
 		for(auto res: result) {
 		}
+		if(transactions) {
+			conn.commit();
+		}
+		auto end = std::chrono::high_resolution_clock::now();
+
+		auto elapsed_seconds =
+			std::chrono::duration_cast<std::chrono::duration<double>>(
+					end - start);
+
+		state.SetIterationTime(elapsed_seconds.count());
 	}
 
 	if(state.thread_index == 0) {
@@ -618,59 +456,10 @@ static void BM_MYSQL_Read_Mul(benchmark::State& state) {
 	state.counters["OpsInv"] = benchmark::Counter(state.iterations(), benchmark::Counter::kIsRate | benchmark::Counter::kInvert);
 }
 
-BENCHMARK(BM_MYSQL_Read_Mul)->Apply(CustomArgumentsInserts3)->Complexity()->DenseThreadRange(1,4);
+BENCHMARK_CAPTURE(BM_MYSQL_Read_Mul, Normal, false)->Apply(CustomArgumentsInserts3)->Complexity()->DenseThreadRange(1, 8, 2)->UseManualTime();
+BENCHMARK_CAPTURE(BM_MYSQL_Read_Mul, Transact, true)->Apply(CustomArgumentsInserts3)->Complexity()->DenseThreadRange(1, 8, 2)->UseManualTime();
 
-static void BM_MYSQL_Read_Mul_Transact(benchmark::State& state) {
-	auto conn = MySQLDBHandler::GetConnection();	
-	std::random_device rd;  //Will be used to obtain a seed for the random number engine
-	std::mt19937 gen(rd()); //Standard mersenne_twister_engine seeded with rd()
-	std::uniform_int_distribution<> dis(0, 4);
-	// Per thread settings...
-	if(state.thread_index == 0) {
-		// This is the first thread, so do initialization here, build indexes etc...
-		CreateTable(conn);
-		try {
-			conn.sql("DROP INDEX idx ON bench.read_bench;").execute();
-		}catch(...) {
-		}
-	}
-	auto db = conn.getSchema("bench");
-	auto table = db.getTable("read_bench");
-	for(auto _ : state) {
-		state.PauseTiming();
-		string selectclause = "a0*2";
-		auto tableSelect = table.select(selectclause);
-		tableSelect.limit(state.range(0));
-		state.ResumeTiming();
-		conn.startTransaction();
-		std::list<mysqlx::Row> result = tableSelect.execute().fetchAll();
-		for(auto res: result) {
-		}
-		conn.commit();
-	}
-
-	if(state.thread_index == 0) {
-		//MySQLDBHandler::DropTable(conn, "bench", "create_bench");
-		// This is the first thread, so do destruction here (delete documents etc..)
-	}
-
-	state.SetComplexityN(state.range(0));
-	state.SetItemsProcessed(state.range(0)*state.iterations());
-
-	// Set the counter as a rate. It will be presented divided
-	// by the duration of the benchmark.
-	// Meaning: per one second, how many 'foo's are processed?
-	state.counters["Ops"] = benchmark::Counter(state.iterations(), benchmark::Counter::kIsRate);
-
-	// Set the counter as a rate. It will be presented divided
-	// by the duration of the benchmark, and the result inverted.
-	// Meaning: how many seconds it takes to process one 'foo'?
-	state.counters["OpsInv"] = benchmark::Counter(state.iterations(), benchmark::Counter::kIsRate | benchmark::Counter::kInvert);
-}
-
-BENCHMARK(BM_MYSQL_Read_Mul_Transact)->Apply(CustomArgumentsInserts3)->Complexity()->DenseThreadRange(1,4);
-
-static void BM_MYSQL_Read_Sort(benchmark::State& state) {
+static void BM_MYSQL_Read_Sort(benchmark::State& state, bool transactions) {
 	auto conn = MySQLDBHandler::GetConnection();	
 	std::random_device rd;  //Will be used to obtain a seed for the random number engine
 	std::mt19937 gen(rd()); //Standard mersenne_twister_engine seeded with rd()
@@ -709,10 +498,24 @@ static void BM_MYSQL_Read_Sort(benchmark::State& state) {
 		}
 		tableSelect.limit(state.range(2));
 		state.ResumeTiming();
+		auto start = std::chrono::high_resolution_clock::now();
+		if(transactions) {
+			conn.startTransaction();
+		}
 		std::list<mysqlx::Row> result = tableSelect.execute().fetchAll();
 		for(auto res: result) {
 			++count;
 		}
+		if(transactions) {
+			conn.commit();
+		}
+		auto end = std::chrono::high_resolution_clock::now();
+
+		auto elapsed_seconds =
+			std::chrono::duration_cast<std::chrono::duration<double>>(
+					end - start);
+
+		state.SetIterationTime(elapsed_seconds.count());
 	}
 
 	if(state.thread_index == 0) {
@@ -734,77 +537,10 @@ static void BM_MYSQL_Read_Sort(benchmark::State& state) {
 	state.counters.insert({{"Fields", benchmark::Counter(state.range(0), benchmark::Counter::kAvgThreads)}, {"Indexes", benchmark::Counter(state.range(1), benchmark::Counter::kAvgThreads)}, {"Limit", benchmark::Counter(state.range(2), benchmark::Counter::kAvgThreads)}});
 }
 
-BENCHMARK(BM_MYSQL_Read_Sort)->Apply(CustomArgumentsInserts4)->Complexity()->DenseThreadRange(1,4);
+BENCHMARK_CAPTURE(BM_MYSQL_Read_Sort, Normal, false)->Apply(CustomArgumentsInserts4)->Complexity()->DenseThreadRange(1, 8, 2)->UseManualTime();
+BENCHMARK_CAPTURE(BM_MYSQL_Read_Sort, Transact, true)->Apply(CustomArgumentsInserts4)->Complexity()->DenseThreadRange(1, 8, 2)->UseManualTime();
 
-static void BM_MYSQL_Read_Sort_Transact(benchmark::State& state) {
-	auto conn = MySQLDBHandler::GetConnection();	
-	std::random_device rd;  //Will be used to obtain a seed for the random number engine
-	std::mt19937 gen(rd()); //Standard mersenne_twister_engine seeded with rd()
-	std::uniform_int_distribution<> dis(0, 4);
-	// Per thread settings...
-	if(state.thread_index == 0) {
-		// This is the first thread, so do initialization here, build indexes etc...
-		CreateTable(conn);
-		try {
-			conn.sql("DROP INDEX idx ON bench.read_bench;").execute();
-		}catch(...) {
-		}
-		if(state.range(1) > 0) {
-			string indexCreate = "CREATE INDEX idx on bench.read_bench (a0";
-			for(int index = 1; index < state.range(1); ++index) {
-				indexCreate += ",a" + to_string(index);
-			}
-			indexCreate += ") ALGORITHM INPLACE;";
-			conn.sql(indexCreate).execute();
-		}
-	}
-	auto db = conn.getSchema("bench");
-	auto table = db.getTable("read_bench");
-	uint64_t count = 0;
-	for(auto _ : state) {
-		state.PauseTiming();
-		std::list<string> selectclause = {"*"};
-
-		auto tableSelect = table.select(selectclause);
-		if(state.range(0) > 0) {
-			std::list<string> orderclause = {"a0 DESC"};
-			for(int n = 1; n < state.range(0); ++n) {
-				orderclause.push_back("a" + to_string(n) + " DESC");
-			}
-			tableSelect.orderBy(orderclause);
-		}
-		tableSelect.limit(state.range(2));
-		state.ResumeTiming();
-		conn.startTransaction();
-		std::list<mysqlx::Row> result = tableSelect.execute().fetchAll();
-		for(auto res: result) {
-			++count;
-		}
-		conn.commit();
-	}
-
-	if(state.thread_index == 0) {
-		//MySQLDBHandler::DropTable(conn, "bench", "create_bench");
-		// This is the first thread, so do destruction here (delete documents etc..)
-	}
-
-	state.SetItemsProcessed(count);
-
-	// Set the counter as a rate. It will be presented divided
-	// by the duration of the benchmark.
-	// Meaning: per one second, how many 'foo's are processed?
-	state.counters["Ops"] = benchmark::Counter(state.iterations(), benchmark::Counter::kIsRate);
-
-	// Set the counter as a rate. It will be presented divided
-	// by the duration of the benchmark, and the result inverted.
-	// Meaning: how many seconds it takes to process one 'foo'?
-	state.counters["OpsInv"] = benchmark::Counter(state.iterations(), benchmark::Counter::kIsRate | benchmark::Counter::kInvert);
-	state.counters.insert({{"Fields", benchmark::Counter(state.range(0), benchmark::Counter::kAvgThreads)}, {"Indexes", benchmark::Counter(state.range(1), benchmark::Counter::kAvgThreads)}, {"Limit", benchmark::Counter(state.range(2), benchmark::Counter::kAvgThreads)}});
-}
-
-BENCHMARK(BM_MYSQL_Read_Sort_Transact)->Apply(CustomArgumentsInserts4)->Complexity()->DenseThreadRange(1,4);
-
-static void BM_MYSQL_Read_Join(benchmark::State& state) {
+static void BM_MYSQL_Read_Join(benchmark::State& state, bool transactions) {
 	auto conn = MySQLDBHandler::GetConnection();	
 	std::random_device rd;  //Will be used to obtain a seed for the random number engine
 	std::mt19937 gen(rd()); //Standard mersenne_twister_engine seeded with rd()
@@ -831,10 +567,24 @@ static void BM_MYSQL_Read_Join(benchmark::State& state) {
 		query += " LIMIT " + to_string(state.range(1));
 		query += ";";
 		state.ResumeTiming();
+		auto start = std::chrono::high_resolution_clock::now();
+		if(transactions) {
+			conn.startTransaction();
+		}
 		std::list<mysqlx::Row> result = conn.sql(query).execute().fetchAll();
 		for(auto res: result) {
 			++count;
 		}
+		if(transactions) {
+			conn.commit();
+		}
+		auto end = std::chrono::high_resolution_clock::now();
+
+		auto elapsed_seconds =
+			std::chrono::duration_cast<std::chrono::duration<double>>(
+					end - start);
+
+		state.SetIterationTime(elapsed_seconds.count());
 	}
 
 	if(state.thread_index == 0) {
@@ -857,66 +607,10 @@ static void BM_MYSQL_Read_Join(benchmark::State& state) {
 	state.counters.insert({{"Indexes", benchmark::Counter(state.range(0), benchmark::Counter::kAvgThreads)}, {"Limit", benchmark::Counter(state.range(1), benchmark::Counter::kAvgThreads)}});
 }
 
-BENCHMARK(BM_MYSQL_Read_Join)->Apply(CustomArgumentsInserts5)->Complexity()->DenseThreadRange(1,4);
+BENCHMARK_CAPTURE(BM_MYSQL_Read_Join, Normal, false)->Apply(CustomArgumentsInserts5)->Complexity()->DenseThreadRange(1, 8, 2)->UseManualTime();
+BENCHMARK_CAPTURE(BM_MYSQL_Read_Join, Transact, true)->Apply(CustomArgumentsInserts5)->Complexity()->DenseThreadRange(1, 8, 2)->UseManualTime();
 
-static void BM_MYSQL_Read_Join_Transact(benchmark::State& state) {
-	auto conn = MySQLDBHandler::GetConnection();	
-	std::random_device rd;  //Will be used to obtain a seed for the random number engine
-	std::mt19937 gen(rd()); //Standard mersenne_twister_engine seeded with rd()
-	std::uniform_int_distribution<> dis(0, 4);
-	// Per thread settings...
-	if(state.thread_index == 0) {
-		// This is the first thread, so do initialization here, build indexes etc...
-		CreateTable(conn);
-		try {
-			conn.sql("DROP INDEX idx ON bench.read_bench;").execute();
-		}catch(...) {
-		}
-		for(int index = 0; index < state.range(0); ++index) {
-			string indexCreate = "CREATE INDEX idx on bench.read_bench a" + to_string(index) + " ALGORITHM INPLACE;";
-			conn.sql(indexCreate).execute();
-		}
-	}
-	auto db = conn.getSchema("bench");
-	uint64_t count = 0;
-	for(auto _ : state) {
-		state.PauseTiming();
-		string selectclause = "SELECT *";
-		string query = selectclause + " FROM bench.read_bench b1 INNER JOIN bench.read_bench b2 ON b1.a0 = b2.a1 AND b1._id != b2._id ";
-		query += " LIMIT " + to_string(state.range(1));
-		query += ";";
-		state.ResumeTiming();
-		conn.startTransaction();
-		std::list<mysqlx::Row> result = conn.sql(query).execute().fetchAll();
-		for(auto res: result) {
-			++count;
-		}
-		conn.commit();
-	}
-
-	if(state.thread_index == 0) {
-		//MySQLDBHandler::DropTable(conn, "bench", "create_bench");
-		// This is the first thread, so do destruction here (delete documents etc..)
-	}
-
-	state.SetComplexityN(state.range(1));
-	state.SetItemsProcessed(state.range(1)*state.iterations());
-
-	// Set the counter as a rate. It will be presented divided
-	// by the duration of the benchmark.
-	// Meaning: per one second, how many 'foo's are processed?
-	state.counters["Ops"] = benchmark::Counter(state.iterations(), benchmark::Counter::kIsRate);
-
-	// Set the counter as a rate. It will be presented divided
-	// by the duration of the benchmark, and the result inverted.
-	// Meaning: how many seconds it takes to process one 'foo'?;
-	state.counters["OpsInv"] = benchmark::Counter(state.iterations(), benchmark::Counter::kIsRate | benchmark::Counter::kInvert);
-	state.counters.insert({{"Indexes", benchmark::Counter(state.range(0), benchmark::Counter::kAvgThreads)}, {"Limit", benchmark::Counter(state.range(1), benchmark::Counter::kAvgThreads)}});
-}
-
-BENCHMARK(BM_MYSQL_Read_Join_Transact)->Apply(CustomArgumentsInserts5)->Complexity()->DenseThreadRange(1,4);
-
-static void BM_MYSQL_Read_Join_Manual(benchmark::State& state) {
+static void BM_MYSQL_Read_Join_Manual(benchmark::State& state, bool	transactions) {
 	auto conn = MySQLDBHandler::GetConnection();	
 	std::random_device rd;  //Will be used to obtain a seed for the random number engine
 	std::mt19937 gen(rd()); //Standard mersenne_twister_engine seeded with rd()
@@ -947,6 +641,10 @@ static void BM_MYSQL_Read_Join_Manual(benchmark::State& state) {
 		vector<pair<mysqlx::Row, vector<mysqlx::Row>>> results;
 		results.reserve(state.range(1));
 		state.ResumeTiming();
+		auto start = std::chrono::high_resolution_clock::now();
+		if(transactions) {
+			conn.startTransaction();
+		}
 
 		auto res = conn.sql(query).execute();
 		for(auto i: res) {
@@ -984,6 +682,16 @@ static void BM_MYSQL_Read_Join_Manual(benchmark::State& state) {
 			if(count >= state.range(1))
 				break;
 		}
+		if(transactions) {
+			conn.commit();
+		}
+		auto end = std::chrono::high_resolution_clock::now();
+
+		auto elapsed_seconds =
+			std::chrono::duration_cast<std::chrono::duration<double>>(
+					end - start);
+
+		state.SetIterationTime(elapsed_seconds.count());
 	}
 
 	if(state.thread_index == 0) {
@@ -1006,97 +714,5 @@ static void BM_MYSQL_Read_Join_Manual(benchmark::State& state) {
 	state.counters.insert({{"Indexes", benchmark::Counter(state.range(0), benchmark::Counter::kAvgThreads)}, {"Limit", benchmark::Counter(state.range(1), benchmark::Counter::kAvgThreads)}, {"Batch", benchmark::Counter(state.range(2), benchmark::Counter::kAvgThreads)}});
 }
 
-BENCHMARK(BM_MYSQL_Read_Join_Manual)->Apply(CustomArgumentsInserts6)->Complexity()->DenseThreadRange(1,4);
-
-static void BM_MYSQL_Read_Join_Manual_Transact(benchmark::State& state) {
-	auto conn = MySQLDBHandler::GetConnection();	
-	std::random_device rd;  //Will be used to obtain a seed for the random number engine
-	std::mt19937 gen(rd()); //Standard mersenne_twister_engine seeded with rd()
-	std::uniform_int_distribution<> dis(0, 4);
-	// Per thread settings...
-	if(state.thread_index == 0) {
-		// This is the first thread, so do initialization here, build indexes etc...
-		CreateTable(conn);
-		try {
-			conn.sql("DROP INDEX idx ON bench.read_bench;").execute();
-		}catch(...) {
-		}
-		for(int index = 0; index < state.range(0); ++index) {
-			string indexCreate = "CREATE INDEX idx on bench.read_bench a" + to_string(index) + " ALGORITHM INPLACE;";
-			conn.sql(indexCreate).execute();
-		}
-	}
-	auto db = conn.getSchema("bench");
-	uint64_t count = 0;
-	for(auto _ : state) {
-		state.PauseTiming();
-		string selectclause = "SELECT *";
-		string query = selectclause + " FROM bench.read_bench";
-		query += " LIMIT " + to_string(state.range(1));
-		query += ";";
-		vector<mysqlx::Row> batch;
-		batch.reserve(state.range(2));
-		vector<pair<mysqlx::Row, vector<mysqlx::Row>>> results;
-		results.reserve(state.range(1));
-		state.ResumeTiming();
-		conn.startTransaction();
-		auto res = conn.sql(query).execute();
-		for(auto i: res) {
-			batch.push_back(i);
-			// Our batch is ready...
-			if(batch.size() == state.range(2)) {
-				string selectclause = "SELECT *";
-				string query = selectclause + " FROM bench.read_bench WHERE	";
-				bool first = true;
-				for(auto querydoc: batch) {
-					vector<mysqlx::Row> a;
-					results.push_back(make_pair(querydoc, a));
-					if(!first)
-						query += " OR ";
-					query += " (a1 = " + to_string(querydoc.get(1).get<uint32_t>()) + " AND _id != " + to_string(querydoc.get(0).get<uint32_t>());
-					query += ") ";
-					first = false;
-				}
-				query += " LIMIT " + to_string(state.range(1));
-				query += ";";
-				auto cursorinternal = conn.sql(query).execute();
-				for(auto row: cursorinternal) {
-					for(auto res: results) {
-						if(res.first.get(1).get<uint32_t>() == row.get(0).get<uint32_t>()) {
-							res.second.push_back(row);
-							++count;
-							break;
-						}
-					}
-					if(count >= state.range(1))
-						break;
-				}
-				batch.clear();
-			}
-			if(count >= state.range(1))
-				break;
-		}
-		conn.commit();
-	}
-
-	if(state.thread_index == 0) {
-		//PostgreSQLDBHandler::DropTable(conn, "bench", "create_bench");
-		// This is the first thread, so do destruction here (delete documents etc..)
-	}
-	state.SetComplexityN(state.range(1));
-
-	state.SetItemsProcessed(state.range(1)*state.iterations());
-
-	// Set the counter as a rate. It will be presented divided
-	// by the duration of the benchmark.
-	// Meaning: per one second, how many 'foo's are processed?
-	state.counters["Ops"] = benchmark::Counter(state.iterations(), benchmark::Counter::kIsRate);
-
-	// Set the counter as a rate. It will be presented divided
-	// by the duration of the benchmark, and the result inverted.
-	// Meaning: how many seconds it takes to process one 'foo'?
-	state.counters["OpsInv"] = benchmark::Counter(state.iterations(), benchmark::Counter::kIsRate | benchmark::Counter::kInvert);
-	state.counters.insert({{"Indexes", benchmark::Counter(state.range(0), benchmark::Counter::kAvgThreads)}, {"Limit", benchmark::Counter(state.range(1), benchmark::Counter::kAvgThreads)}, {"Batch", benchmark::Counter(state.range(2), benchmark::Counter::kAvgThreads)}});
-}
-
-BENCHMARK(BM_MYSQL_Read_Join_Manual_Transact)->Apply(CustomArgumentsInserts6)->Complexity()->DenseThreadRange(1,4);
+BENCHMARK_CAPTURE(BM_MYSQL_Read_Join_Manual, Normal, false)->Apply(CustomArgumentsInserts6)->Complexity()->DenseThreadRange(1, 8, 2)->UseManualTime();
+BENCHMARK_CAPTURE(BM_MYSQL_Read_Join_Manual, Transact, true)->Apply(CustomArgumentsInserts6)->Complexity()->DenseThreadRange(1, 8, 2)->UseManualTime();

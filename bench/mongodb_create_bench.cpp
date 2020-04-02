@@ -1,7 +1,10 @@
 #include "benchmark/benchmark.h"
 #include "dbphd/mongodb/mongodb.hpp"
+#include "mongocxx/bulk_write.hpp"
+#include "mongocxx/model/insert_one.hpp"
 #include <random>
 #include <string>
+#include <iostream>
 
 // Insert tests simply tests insert performance based on:
 // *	Number of fields
@@ -28,7 +31,8 @@ static void CustomArgumentsInserts(benchmark::internal::Benchmark* b) {
 	}
 }
 
-static void BM_MONGO_Insert(benchmark::State& state) {
+template <class ...ExtraArgs>
+static void BM_MONGO_Insert(benchmark::State& state, bool transactions) {
 	auto conn = MongoDBHandler::GetConnection();
 	auto db = conn->database("bench");
 	auto collection = db.collection("create_bench");
@@ -60,7 +64,21 @@ static void BM_MONGO_Insert(benchmark::State& state) {
 			documents.push_back(doc << bsoncxx::builder::stream::finalize);
 		}
 		state.ResumeTiming();
+		auto start = std::chrono::high_resolution_clock::now();
+		if(transactions) {
+			session.start_transaction();
+		}
 		collection.insert_many(session, documents);
+		if(transactions) {
+			session.commit_transaction();
+		}
+		auto end = std::chrono::high_resolution_clock::now();
+
+		auto elapsed_seconds =
+			std::chrono::duration_cast<std::chrono::duration<double>>(
+					end - start);
+
+		state.SetIterationTime(elapsed_seconds.count());
 	}
 
 	if(state.thread_index == 0) {
@@ -81,9 +99,10 @@ static void BM_MONGO_Insert(benchmark::State& state) {
 	state.counters.insert({{"Documents", benchmark::Counter(state.range(0), benchmark::Counter::kAvgThreads)}, {"Fields", benchmark::Counter(state.range(1), benchmark::Counter::kAvgThreads)}, {"Indexes", benchmark::Counter(state.range(2), benchmark::Counter::kAvgThreads)}});
 }
 
-BENCHMARK(BM_MONGO_Insert)->Apply(CustomArgumentsInserts)->Complexity()->DenseThreadRange(1,4);
+BENCHMARK_CAPTURE(BM_MONGO_Insert, Normal, false)->Apply(CustomArgumentsInserts)->Complexity()->DenseThreadRange(1, 8, 2)->UseManualTime();
+BENCHMARK_CAPTURE(BM_MONGO_Insert, Transact, true)->Apply(CustomArgumentsInserts)->Complexity()->DenseThreadRange(1, 8, 2)->UseManualTime();
 
-static void BM_MONGO_Insert_Transact(benchmark::State& state) {
+static void BM_MONGO_Insert_Batch(benchmark::State& state, bool transactions) {
 	auto conn = MongoDBHandler::GetConnection();
 	auto db = conn->database("bench");
 	auto collection = db.collection("create_bench");
@@ -94,7 +113,7 @@ static void BM_MONGO_Insert_Transact(benchmark::State& state) {
 	if(state.thread_index == 0) {
 		// This is the first thread, so do initialization here, build indexes etc...
 		collection.drop();
-		collection.create_index(make_document(kvp("_id", 1)));
+		collection.create_index(make_document(kvp("_id", 1))); // This creates the collection too
 		if(state.range(2) > 0) {
 			for(int index = 0; index < state.range(2); ++index) {
 				collection.create_index(make_document(kvp(("a" + to_string(index)), 1)));
@@ -104,7 +123,7 @@ static void BM_MONGO_Insert_Transact(benchmark::State& state) {
 	auto session = conn->start_session();
 	for(auto _ : state) {
 		state.PauseTiming();
-		std::vector<bsoncxx::document::value> documents;
+		auto writer = collection.create_bulk_write(session);
 		for(int n = 0; n < state.range(0); ++n) {
 			auto builder = bsoncxx::builder::stream::document{};
 			auto doc = builder << "a0" << to_string(dis(gen));
@@ -112,12 +131,27 @@ static void BM_MONGO_Insert_Transact(benchmark::State& state) {
 				doc << ("a" + to_string(fields)) << dis(gen);
 			}
 
-			documents.push_back(doc << bsoncxx::builder::stream::finalize);
+			mongocxx::model::insert_one inserter(doc << bsoncxx::builder::stream::finalize);
+			writer.append(inserter);
 		}
 		state.ResumeTiming();
-		session.start_transaction();
-		collection.insert_many(session, documents);
-		session.commit_transaction();
+		auto start = std::chrono::high_resolution_clock::now();
+		if(transactions) {
+			session.start_transaction();
+		}
+		writer.execute();
+
+		if(transactions) {
+			session.commit_transaction();
+		}
+
+		auto end = std::chrono::high_resolution_clock::now();
+
+		auto elapsed_seconds =
+			std::chrono::duration_cast<std::chrono::duration<double>>(
+					end - start);
+
+		state.SetIterationTime(elapsed_seconds.count());
 	}
 
 	if(state.thread_index == 0) {
@@ -125,7 +159,7 @@ static void BM_MONGO_Insert_Transact(benchmark::State& state) {
 		// This is the first thread, so do destruction here (delete documents etc..)
 	}
 
-//	state.SetItemsProcessed(state.iterations()*state.range(0));
+	//state.SetItemsProcessed(state.iterations()*state.range(0));
 	// Set the counter as a rate. It will be presented divided
 	// by the duration of the benchmark.
 	// Meaning: per one second, how many 'foo's are processed?
@@ -138,4 +172,5 @@ static void BM_MONGO_Insert_Transact(benchmark::State& state) {
 	state.counters.insert({{"Documents", benchmark::Counter(state.range(0), benchmark::Counter::kAvgThreads)}, {"Fields", benchmark::Counter(state.range(1), benchmark::Counter::kAvgThreads)}, {"Indexes", benchmark::Counter(state.range(2), benchmark::Counter::kAvgThreads)}});
 }
 
-BENCHMARK(BM_MONGO_Insert_Transact)->Apply(CustomArgumentsInserts)->Complexity()->DenseThreadRange(1,4);
+BENCHMARK_CAPTURE(BM_MONGO_Insert_Batch, Normal, false)->Apply(CustomArgumentsInserts)->Complexity()->DenseThreadRange(1, 8, 2)->UseManualTime();
+BENCHMARK_CAPTURE(BM_MONGO_Insert_Batch, Transact, true)->Apply(CustomArgumentsInserts)->Complexity()->DenseThreadRange(1, 8, 2)->UseManualTime();

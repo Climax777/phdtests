@@ -15,7 +15,7 @@ std::vector<std::vector<int>> Precalculator::PrecalcValues;
 int Precalculator::Values = 10;
 int Precalculator::Columns = 6;
 uint64_t Precalculator::Rows = 1000000;
-bool Precalculator::PreCalculated = false;
+volatile bool Precalculator::PreCalculated = false;
 bool Precalculator::PreCalculate() {
 	if(PreCalculated)
 		return true;
