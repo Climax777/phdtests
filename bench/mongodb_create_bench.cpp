@@ -2,6 +2,7 @@
 #include "dbphd/mongodb/mongodb.hpp"
 #include "mongocxx/bulk_write.hpp"
 #include "mongocxx/model/insert_one.hpp"
+#include "mongocxx/options/bulk_write.hpp"
 #include <random>
 #include <string>
 #include <iostream>
