@@ -103,7 +103,7 @@ static void BM_MONGO_Insert(benchmark::State& state, bool transactions) {
 BENCHMARK_CAPTURE(BM_MONGO_Insert, Normal, false)->Apply(CustomArgumentsInserts)->Complexity()->DenseThreadRange(1, 8, 2)->UseManualTime();
 BENCHMARK_CAPTURE(BM_MONGO_Insert, Transact, true)->Apply(CustomArgumentsInserts)->Complexity()->DenseThreadRange(1, 8, 2)->UseManualTime();
 
-static void BM_MONGO_Insert_Batch(benchmark::State& state, bool transactions) {
+static void BM_MONGO_Insert_Bulk(benchmark::State& state, bool transactions) {
 	auto conn = MongoDBHandler::GetConnection();
 	auto db = conn->database("bench");
 	auto collection = db.collection("create_bench");
@@ -173,5 +173,5 @@ static void BM_MONGO_Insert_Batch(benchmark::State& state, bool transactions) {
 	state.counters.insert({{"Documents", benchmark::Counter(state.range(0), benchmark::Counter::kAvgThreads)}, {"Fields", benchmark::Counter(state.range(1), benchmark::Counter::kAvgThreads)}, {"Indexes", benchmark::Counter(state.range(2), benchmark::Counter::kAvgThreads)}});
 }
 
-BENCHMARK_CAPTURE(BM_MONGO_Insert_Batch, Normal, false)->Apply(CustomArgumentsInserts)->Complexity()->DenseThreadRange(1, 8, 2)->UseManualTime();
-BENCHMARK_CAPTURE(BM_MONGO_Insert_Batch, Transact, true)->Apply(CustomArgumentsInserts)->Complexity()->DenseThreadRange(1, 8, 2)->UseManualTime();
+BENCHMARK_CAPTURE(BM_MONGO_Insert_Bulk, Normal, false)->Apply(CustomArgumentsInserts)->Complexity()->DenseThreadRange(1, 8, 2)->UseManualTime();
+BENCHMARK_CAPTURE(BM_MONGO_Insert_Bulk, Transact, true)->Apply(CustomArgumentsInserts)->Complexity()->DenseThreadRange(1, 8, 2)->UseManualTime();
