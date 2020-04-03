@@ -18,8 +18,9 @@
 // *	sort // Done
 // *	Join Done
 // *	Manual Join Done
-// *	Skip Not really more impactful than just returning the document
+// *	Skip Not really more impactful than just returning the document Skipped
 // *	Range queries // This is implicitly the same as fixing one and leaving the rest of the columns >= 0 ???
+// * Not taken into account is the size of the document itself. Also the number of fields are quite low (<10), perhaps significant performance impact occurs on more fields
 
 using namespace std;
 using bsoncxx::builder::basic::kvp;
@@ -89,11 +90,10 @@ static void CreateCollection(mongocxx::pool::entry& conn) {
 		auto collection = db.collection("read_bench");
 
 		collection.drop();
-		collection = db.create_collection("read_bench");
 		collection.create_index(make_document(kvp("_id", 1)));
 
+		auto writer = collection.create_bulk_write();
 		for(int i = 0; i < Precalculator::Rows; i += 100) {
-			std::vector<bsoncxx::document::value> documents;
 			for(int j = 0; j < 100 && i+j < Precalculator::Rows;++j) {
 				auto builder = bsoncxx::builder::stream::document{};
 				auto doc = builder << "_id" << j+i;
@@ -103,9 +103,10 @@ static void CreateCollection(mongocxx::pool::entry& conn) {
 					doc << ("a" + to_string(f)) << rowval[f];
 				}
 
-				documents.push_back(doc << bsoncxx::builder::stream::finalize);
+				mongocxx::model::insert_one inserter(doc << bsoncxx::builder::stream::finalize);
+				writer.append(inserter);
 			}
-			collection.insert_many(documents);
+			writer.execute();
 		}
 		auto end = chrono::steady_clock::now();
 		cout<< " Done in " << chrono::duration <double, milli> (end-start).count() << " ms" << endl << endl;
