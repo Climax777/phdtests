@@ -124,7 +124,10 @@ static void BM_MONGO_Insert_Bulk(benchmark::State& state, bool transactions) {
 	auto session = conn->start_session();
 	for(auto _ : state) {
 		state.PauseTiming();
-		auto writer = collection.create_bulk_write(session);
+		mongocxx::options::bulk_write bulkOptions;
+		bulkOptions.bypass_document_validation(true);
+		bulkOptions.ordered(false);
+		auto writer = collection.create_bulk_write(session, bulkOptions);
 		for(int n = 0; n < state.range(0); ++n) {
 			auto builder = bsoncxx::builder::stream::document{};
 			auto doc = builder << "a0" << to_string(dis(gen));

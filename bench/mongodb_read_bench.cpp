@@ -106,8 +106,8 @@ static void CreateCollection(mongocxx::pool::entry& conn) {
 				mongocxx::model::insert_one inserter(doc << bsoncxx::builder::stream::finalize);
 				writer.append(inserter);
 			}
-			writer.execute();
 		}
+		writer.execute();
 		auto end = chrono::steady_clock::now();
 		cout<< " Done in " << chrono::duration <double, milli> (end-start).count() << " ms" << endl << endl;
 		cout.flush();
