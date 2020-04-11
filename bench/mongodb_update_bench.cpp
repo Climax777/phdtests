@@ -121,7 +121,6 @@ static void BM_MONGO_Update(benchmark::State& state, bool transactions, bool tes
 				collection.create_index(idx << bsoncxx::builder::stream::finalize);
 			}
 		}
-		// TODO figure out how to wait for index...
 	}
 	auto session = conn->start_session();
 	uint64_t count = 0;
