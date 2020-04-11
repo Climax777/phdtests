@@ -32,7 +32,6 @@ static void CustomArgumentsInserts(benchmark::internal::Benchmark* b) {
 	}
 }
 
-template <class ...ExtraArgs>
 static void BM_MONGO_Insert(benchmark::State& state, bool transactions) {
 	auto conn = MongoDBHandler::GetConnection();
 	auto db = conn->database("bench");
