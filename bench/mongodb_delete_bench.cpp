@@ -81,8 +81,6 @@ static void BM_MONGO_Delete(benchmark::State& state, bool transactions) {
 	CreateCollection(conn, postfix);
 	collection = db.collection("delete_bench" + postfix);
 	collection.indexes().drop_all();
-	mongocxx::options::index index_options{};
-	index_options.background(false);
 	if(state.range(1) > 0) {
 		auto idxbuilder = bsoncxx::builder::stream::document{};
 		auto idx = idxbuilder << "a0" << 1;
@@ -90,7 +88,7 @@ static void BM_MONGO_Delete(benchmark::State& state, bool transactions) {
 			idx << ("a" + to_string(index)) << 1;
 		}
 		// One compounded index (basically just many indexes)
-		collection.create_index(idx << bsoncxx::builder::stream::finalize, index_options);
+		collection.create_index(idx << bsoncxx::builder::stream::finalize);
 	}
 	auto session = conn->start_session();
 	uint64_t count = 0;

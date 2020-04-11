@@ -20,7 +20,6 @@ using namespace std;
 using bsoncxx::builder::basic::kvp;
 using bsoncxx::builder::basic::make_document;
 
-
 static void CustomArgumentsUpdates(benchmark::internal::Benchmark* b) {
 	for (int i = 0; i <= Precalculator::Columns; ++i) { // fields to query
 		for (int j = 1; j <= Precalculator::Columns; ++j) { // fields to write
@@ -86,15 +85,13 @@ static void BM_MONGO_Update(benchmark::State& state, bool transactions, bool tes
 	std::random_device rd;  //Will be used to obtain a seed for the random number engine
 	std::mt19937 gen(rd()); //Standard mersenne_twister_engine seeded with rd()
 	std::uniform_int_distribution<> dis(0, 4);
-	std::uniform_int_distribution<> dis2(1);
+	std::uniform_int_distribution<> dis2(1,100);
 	// Per thread settings...
 	if(state.thread_index == 0) {
 		// This is the first thread, so do initialization here, build indexes etc...
 		CreateCollection(conn, true); // add double fields, as to measure write perforance without indexes playing a role
 		collection = db.collection("update_bench");
 		collection.indexes().drop_all();
-		mongocxx::options::index index_options{};
-		index_options.background(false);
 		if(testwriteindexes) {
 			if(state.range(0) > 0) {
 				auto idxbuilder = bsoncxx::builder::stream::document{};
@@ -103,13 +100,13 @@ static void BM_MONGO_Update(benchmark::State& state, bool transactions, bool tes
 					idx << ("a" + to_string(index)) << 1;
 				}
 				// One compounded index (basically just many indexes)
-				collection.create_index(idx << bsoncxx::builder::stream::finalize, index_options);
+				collection.create_index(idx << bsoncxx::builder::stream::finalize);
 			}
 			if(state.range(2) > 0) { // Create individual indexes for write indexes
 				for(int index = 0; index < state.range(2); ++index) {
 					auto idxbuilder = bsoncxx::builder::stream::document{};
 					auto idx = idxbuilder << ("b"+to_string(index)) << 1;
-					collection.create_index(idx << bsoncxx::builder::stream::finalize, index_options);
+					collection.create_index(idx << bsoncxx::builder::stream::finalize);
 				}
 				// One compounded index (basically just many indexes)
 			}
@@ -121,9 +118,10 @@ static void BM_MONGO_Update(benchmark::State& state, bool transactions, bool tes
 					idx << ("a" + to_string(index)) << 1;
 				}
 				// One compounded index (basically just many indexes)
-				collection.create_index(idx << bsoncxx::builder::stream::finalize, index_options);
+				collection.create_index(idx << bsoncxx::builder::stream::finalize);
 			}
 		}
+		// TODO figure out how to wait for index...
 	}
 	auto session = conn->start_session();
 	uint64_t count = 0;
@@ -139,12 +137,14 @@ static void BM_MONGO_Update(benchmark::State& state, bool transactions, bool tes
 			builderupdate << ("b" + to_string(n)) << dis2(gen);
 		}
 		builderupdate << bsoncxx::builder::stream::close_document;
+		auto query = builder << bsoncxx::builder::stream::finalize;
+		auto update = builderupdate << bsoncxx::builder::stream::finalize;
 		state.ResumeTiming();
 		auto start = std::chrono::high_resolution_clock::now();
 		if(transactions) {
 			session.start_transaction();
 		}
-		auto res = collection.update_many(session, builder << bsoncxx::builder::stream::finalize, builderupdate << bsoncxx::builder::stream::finalize);
+		auto res = collection.update_many(session, query.view(), update.view());
 		count += res->matched_count();
 		if(transactions) {
 			session.commit_transaction();
