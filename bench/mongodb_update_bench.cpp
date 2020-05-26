@@ -181,34 +181,3 @@ BENCHMARK_CAPTURE(BM_MONGO_Update, Normal, false, false)->Apply(CustomArgumentsU
 BENCHMARK_CAPTURE(BM_MONGO_Update, Transact, true, false)->Apply(CustomArgumentsUpdates)->Complexity()->DenseThreadRange(1, 8, 2)->UseManualTime();
 BENCHMARK_CAPTURE(BM_MONGO_Update, NormalWriteIdx, false, true)->Apply(CustomArgumentsUpdates2)->Complexity()->DenseThreadRange(1, 8, 2)->UseManualTime();
 BENCHMARK_CAPTURE(BM_MONGO_Update, TransactWriteIdx, true, true)->Apply(CustomArgumentsUpdates2)->Complexity()->DenseThreadRange(1, 8, 2)->UseManualTime();
-
-/*static void BM_MONGO_Select(benchmark::State& state) {
-	auto conn = MongoDBHandler::GetConnection();
-	auto db = conn->database("bench");
-	auto collection = db.collection("select_bench");
-	mongocxx::pipeline stages;
-	stages.limit(1);
-	stages.project(make_document(kvp("_id", 0), kvp("result", make_document(kvp("$literal", 500)))));
-	for(auto _ : state) {
-		auto cursor = collection.aggregate(stages);
-	}
-}
-
-BENCHMARK(BM_MONGO_Select);
-
-static void BM_MONGO_SelectTransact(benchmark::State& state) {
-	auto conn = MongoDBHandler::GetConnection();
-	auto db = conn->database("bench");
-	auto collection = db.collection("select_bench");
-	mongocxx::pipeline stages;
-	stages.limit(1);
-	stages.project(make_document(kvp("_id", 0), kvp("result", make_document(kvp("$literal", 500)))));
-	auto session = conn->start_session();
-	for(auto _ : state) {
-		session.start_transaction();
-		auto cursor = collection.aggregate(stages);
-		session.commit_transaction();
-	}
-}
-
-BENCHMARK(BM_MONGO_SelectTransact);*/
