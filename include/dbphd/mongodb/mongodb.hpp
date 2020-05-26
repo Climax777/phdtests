@@ -28,7 +28,7 @@ public:
 	MongoDBHandler();
 	virtual ~MongoDBHandler();
 	
-	static mongocxx::pool::entry GetConnection(std::string connstr = "mongodb://localhost:27017/?replicaSet=myset&maxPoolSize=100&minPoolSize=8&compressors=zstd,snappy,zlib");
+	static mongocxx::pool::entry GetConnection(std::string connstr = "mongodb://localhost:27017/?maxPoolSize=100&minPoolSize=8&compressors=zstd,snappy,zlib");
 };
 
 #endif /* MONGODB_HPP */
