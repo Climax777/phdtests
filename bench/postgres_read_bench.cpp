@@ -127,12 +127,20 @@ static void BM_PQXX_Read_Count(benchmark::State& state, bool transactions) {
 	if(state.thread_index == 0) {
 		// This is the first thread, so do initialization here, build indexes etc...
 		CreateTable(conn);
-		try {
-			string query = "DROP INDEX IF EXISTS bench.read_bench_idx;";
-			pqxx::nontransaction N(*conn);
-			pqxx::result R(N.exec(query));
-		}catch(...) {
-		}
+        try {
+            string query = "DROP INDEX IF EXISTS bench.read_bench_idx;";
+            pqxx::nontransaction N(*conn);
+            pqxx::result R(N.exec(query));
+        }catch(...) {
+        }
+		for(int index = 0; index < 8; ++index) {
+            try {
+                string query = "DROP INDEX IF EXISTS bench.read_bench_idx_a" + to_string(index) + ";";
+                pqxx::nontransaction N(*conn);
+                pqxx::result R(N.exec(query));
+            }catch(...) {
+            }
+        }
 		if(state.range(1) > 0) {
 			string indexCreate = "CREATE INDEX read_bench_idx on bench.read_bench (a0";
 			for(int index = 1; index < state.range(1); ++index) {
@@ -211,12 +219,20 @@ static void BM_PQXX_Reads(benchmark::State& state, bool transactions) {
 	if(state.thread_index == 0) {
 		// This is the first thread, so do initialization here, build indexes etc...
 		CreateTable(conn);
-		try {
-			string query = "DROP INDEX IF EXISTS bench.read_bench_idx;";
-			pqxx::nontransaction N(*conn);
-			pqxx::result R(N.exec(query));
-		}catch(...) {
-		}
+        try {
+            string query = "DROP INDEX IF EXISTS bench.read_bench_idx;";
+            pqxx::nontransaction N(*conn);
+            pqxx::result R(N.exec(query));
+        }catch(...) {
+        }
+		for(int index = 0; index < 8; ++index) {
+            try {
+                string query = "DROP INDEX IF EXISTS bench.read_bench_idx_a" + to_string(index) + ";";
+                pqxx::nontransaction N(*conn);
+                pqxx::result R(N.exec(query));
+            }catch(...) {
+            }
+        }
 		if(state.range(2) > 0) {
 			string indexCreate = "CREATE INDEX read_bench_idx on bench.read_bench (a0";
 			for(int index = 1; index < state.range(2); ++index) {
@@ -302,12 +318,20 @@ static void BM_PQXX_Read_Sum(benchmark::State& state, bool transactions) {
 	if(state.thread_index == 0) {
 		// This is the first thread, so do initialization here, build indexes etc...
 		CreateTable(conn);
-		try {
-			string query = "DROP INDEX IF EXISTS bench.read_bench_idx;";
-			pqxx::nontransaction N(*conn);
-			pqxx::result R(N.exec(query));
-		}catch(...) {
-		}
+        try {
+            string query = "DROP INDEX IF EXISTS bench.read_bench_idx;";
+            pqxx::nontransaction N(*conn);
+            pqxx::result R(N.exec(query));
+        }catch(...) {
+        }
+		for(int index = 0; index < 8; ++index) {
+            try {
+                string query = "DROP INDEX IF EXISTS bench.read_bench_idx_a" + to_string(index) + ";";
+                pqxx::nontransaction N(*conn);
+                pqxx::result R(N.exec(query));
+            }catch(...) {
+            }
+        }
 	}
 	for(auto _ : state) {
 		state.PauseTiming();
@@ -373,12 +397,20 @@ static void BM_PQXX_Read_Avg(benchmark::State& state, bool transactions) {
 	if(state.thread_index == 0) {
 		// This is the first thread, so do initialization here, build indexes etc...
 		CreateTable(conn);
-		try {
-			string query = "DROP INDEX IF EXISTS bench.read_bench_idx;";
-			pqxx::nontransaction N(*conn);
-			pqxx::result R(N.exec(query));
-		}catch(...) {
-		}
+        try {
+            string query = "DROP INDEX IF EXISTS bench.read_bench_idx;";
+            pqxx::nontransaction N(*conn);
+            pqxx::result R(N.exec(query));
+        }catch(...) {
+        }
+		for(int index = 0; index < 8; ++index) {
+            try {
+                string query = "DROP INDEX IF EXISTS bench.read_bench_idx_a" + to_string(index) + ";";
+                pqxx::nontransaction N(*conn);
+                pqxx::result R(N.exec(query));
+            }catch(...) {
+            }
+        }
 	}
 	for(auto _ : state) {
 		state.PauseTiming();
@@ -444,12 +476,20 @@ static void BM_PQXX_Read_Mul(benchmark::State& state, bool transactions) {
 	if(state.thread_index == 0) {
 		// This is the first thread, so do initialization here, build indexes etc...
 		CreateTable(conn);
-		try {
-			string query = "DROP INDEX IF EXISTS bench.read_bench_idx;";
-			pqxx::nontransaction N(*conn);
-			pqxx::result R(N.exec(query));
-		}catch(...) {
-		}
+        try {
+            string query = "DROP INDEX IF EXISTS bench.read_bench_idx;";
+            pqxx::nontransaction N(*conn);
+            pqxx::result R(N.exec(query));
+        }catch(...) {
+        }
+		for(int index = 0; index < 8; ++index) {
+            try {
+                string query = "DROP INDEX IF EXISTS bench.read_bench_idx_a" + to_string(index) + ";";
+                pqxx::nontransaction N(*conn);
+                pqxx::result R(N.exec(query));
+            }catch(...) {
+            }
+        }
 	}
 	for(auto _ : state) {
 		state.PauseTiming();
@@ -603,15 +643,23 @@ static void BM_PQXX_Read_Join(benchmark::State& state, bool transactions) {
 	if(state.thread_index == 0) {
 		// This is the first thread, so do initialization here, build indexes etc...
 		CreateTable(conn);
-		try {
-			string query = "DROP INDEX IF EXISTS bench.read_bench_idx;";
-			pqxx::nontransaction N(*conn);
-			pqxx::result R(N.exec(query));
-		}catch(...) {
-		}
+        try {
+            string query = "DROP INDEX IF EXISTS bench.read_bench_idx;";
+            pqxx::nontransaction N(*conn);
+            pqxx::result R(N.exec(query));
+        }catch(...) {
+        }
+		for(int index = 0; index < 8; ++index) {
+            try {
+                string query = "DROP INDEX IF EXISTS bench.read_bench_idx_a" + to_string(index) + ";";
+                pqxx::nontransaction N(*conn);
+                pqxx::result R(N.exec(query));
+            }catch(...) {
+            }
+        }
 		for(int index = 0; index < state.range(0); ++index) {
-			string indexCreate = "CREATE INDEX read_bench_idx_a" + to_string(index) + " on bench.read_bench a" + to_string(index);
-			indexCreate += ";";
+			string indexCreate = "CREATE INDEX read_bench_idx_a" + to_string(index) + " on bench.read_bench (a" + to_string(index);
+			indexCreate += ");";
 			pqxx::nontransaction N(*conn);
 			pqxx::result R(N.exec(indexCreate));
 		}
@@ -684,15 +732,23 @@ static void BM_PQXX_Read_Join_Manual(benchmark::State& state, bool transactions)
 	if(state.thread_index == 0) {
 		// This is the first thread, so do initialization here, build indexes etc...
 		CreateTable(conn);
-		try {
-			string query = "DROP INDEX IF EXISTS bench.read_bench_idx;";
-			pqxx::nontransaction N(*conn);
-			pqxx::result R(N.exec(query));
-		}catch(...) {
-		}
+        try {
+            string query = "DROP INDEX IF EXISTS bench.read_bench_idx;";
+            pqxx::nontransaction N(*conn);
+            pqxx::result R(N.exec(query));
+        }catch(...) {
+        }
+		for(int index = 0; index < 8; ++index) {
+            try {
+                string query = "DROP INDEX IF EXISTS bench.read_bench_idx_a" + to_string(index) + ";";
+                pqxx::nontransaction N(*conn);
+                pqxx::result R(N.exec(query));
+            }catch(...) {
+            }
+        }
 		for(int index = 0; index < state.range(0); ++index) {
-			string indexCreate = "CREATE INDEX read_bench_idx_a" + to_string(index) + " on bench.read_bench a" + to_string(index);
-			indexCreate += ";";
+			string indexCreate = "CREATE INDEX read_bench_idx_a" + to_string(index) + " on bench.read_bench (a" + to_string(index);
+			indexCreate += ");";
 			pqxx::nontransaction N(*conn);
 			pqxx::result R(N.exec(indexCreate));
 		}
