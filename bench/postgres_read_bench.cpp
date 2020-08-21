@@ -45,7 +45,7 @@ static void CustomArgumentsInserts4(benchmark::internal::Benchmark* b) {
 }
 
 static void CustomArgumentsInserts5(benchmark::internal::Benchmark* b) {
-	for (int i = 0; i <= 2; ++i) { // fields to index
+	for (int i = 0; i < 2; ++i) { // fields to index
 		for(int l = 1; l <= (int)pow(Precalculator::Values,Precalculator::Columns); l *= 2) { // Documents to return
 			b->Args({i, l});
 		}
@@ -53,7 +53,7 @@ static void CustomArgumentsInserts5(benchmark::internal::Benchmark* b) {
 }
 
 static void CustomArgumentsInserts6(benchmark::internal::Benchmark* b) {
-	for (int i = 0; i <= 2; ++i) { // fields to index
+	for (int i = 0; i < 2; ++i) { // fields to index
 		for(int j = 1; j <= (int)pow(Precalculator::Values,Precalculator::Columns); j *= 2) { // Documents to return
 			for(int k = 1; k < j; k *= 2) { // Documents to query for batch
 				b->Args({i, j, k});
