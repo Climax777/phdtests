@@ -502,6 +502,8 @@ static void BM_MONGO_Read_Sort(benchmark::State& state, bool transactions) {
 			builder << ("a" + to_string(n)) << -1;
 		}
 		mongocxx::options::find options;
+
+        options.allow_disk_use(true);
 		options.sort(builder << bsoncxx::builder::stream::finalize);
 		options.batch_size(INT32_MAX).limit(state.range(2));
 		state.ResumeTiming();
