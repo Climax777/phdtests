@@ -1,4 +1,6 @@
 #include "benchmark/benchmark.h"
+#include "bsoncxx/document/value.hpp"
+#include "bsoncxx/json.hpp"
 #include "dbphd/mongodb/mongodb.hpp"
 #include "precalculate.hpp"
 
@@ -676,9 +678,9 @@ static void BM_MONGO_Read_Join_Manual(benchmark::State& state, bool transactions
 	uint64_t count = 0;
 	for(auto _ : state) {
 		state.PauseTiming();
-		vector<bsoncxx::document::view> batch;
+		vector<bsoncxx::document::value> batch;
 		batch.reserve(state.range(2));
-		vector<pair<bsoncxx::document::view, vector<bsoncxx::document::view>>> results;
+		vector<pair<bsoncxx::document::value, vector<bsoncxx::document::view>>> results;
 		results.reserve(state.range(1));
 		state.ResumeTiming();
 		auto start = std::chrono::high_resolution_clock::now();
@@ -687,17 +689,21 @@ static void BM_MONGO_Read_Join_Manual(benchmark::State& state, bool transactions
 		}
 		mongocxx::options::find opts;
 		opts.limit(state.range(1));
+        //cout << "Limit: " << state.range(1) << endl;
 		auto cursor = collection.find(session, {}, opts);
 		for(auto doc : cursor) {
-			batch.push_back(doc);
+            //cout<< "doc: " << bsoncxx::to_json(doc) << endl;
+			batch.push_back(bsoncxx::document::value(doc));
 			// Our batch is ready...
 			if(batch.size() == state.range(2)) {
 				auto query = bsoncxx::builder::stream::document{};
 				auto partial = query << "$or" << bsoncxx::builder::stream::open_array;
 				for(auto querydoc : batch) {
+                    auto viewer = querydoc.view();
+                    //cout<< bsoncxx::to_json(viewer) << endl;
 					vector<bsoncxx::document::view> a;
 					results.push_back(make_pair(querydoc, a));
-					partial = partial << bsoncxx::builder::stream::open_document << "$and" << bsoncxx::builder::stream::open_array << bsoncxx::builder::stream::open_document << "a1" << querydoc["a0"].get_int32() << bsoncxx::builder::stream::close_document << bsoncxx::builder::stream::open_document << "_id"  << bsoncxx::builder::stream::open_document << "$ne" << querydoc["_id"].get_int32() << bsoncxx::builder::stream::close_document << bsoncxx::builder::stream::close_document << bsoncxx::builder::stream::close_array << bsoncxx::builder::stream::close_document;
+					partial = partial << bsoncxx::builder::stream::open_document << "$and" << bsoncxx::builder::stream::open_array << bsoncxx::builder::stream::open_document << "a1" << viewer["a0"].get_int32() << bsoncxx::builder::stream::close_document << bsoncxx::builder::stream::open_document << "_id"  << bsoncxx::builder::stream::open_document << "$ne" << viewer["_id"].get_int32() << bsoncxx::builder::stream::close_document << bsoncxx::builder::stream::close_document << bsoncxx::builder::stream::close_array << bsoncxx::builder::stream::close_document;
 				} 
 				mongocxx::options::find opts;
 				opts.limit(state.range(1));
@@ -705,7 +711,7 @@ static void BM_MONGO_Read_Join_Manual(benchmark::State& state, bool transactions
 				auto cursorinternal = collection.find(session, afterin << bsoncxx::builder::stream::finalize, opts);
 				for(auto doc : cursorinternal) {
 					for(auto res: results) {
-						if(res.first["a0"].get_value() == doc["a0"].get_value()) {
+						if(res.first.view()["a0"].get_value() == doc["a0"].get_value()) {
 							res.second.push_back(doc);
 							++count;
 							break;
