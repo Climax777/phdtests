@@ -553,8 +553,15 @@ static void BM_MYSQL_Read_Join(benchmark::State& state, bool transactions) {
 			conn.sql("DROP INDEX idx ON bench.read_bench;").execute();
 		}catch(...) {
 		}
+		try {
+            for(int index = 0; index < state.range(0); ++index) {
+                string indexDrop = "DROP INDEX idx" + to_string(index) + " on bench.read_bench;";
+                conn.sql(indexDrop).execute();
+            }
+        }catch(...) {
+		}
 		for(int index = 0; index < state.range(0); ++index) {
-			string indexCreate = "CREATE INDEX idx on bench.read_bench a" + to_string(index) + " ALGORITHM INPLACE;";
+			string indexCreate = "CREATE INDEX idx" + to_string(index) + " on bench.read_bench a" + to_string(index) + " ALGORITHM INPLACE;";
 			conn.sql(indexCreate).execute();
 		}
 	}
