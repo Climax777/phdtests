@@ -103,11 +103,13 @@ static void BM_MONGO_Update(benchmark::State& state, bool transactions, bool tes
 				collection.create_index(idx << bsoncxx::builder::stream::finalize);
 			}
 			if(state.range(2) > 0) { // Create individual indexes for write indexes
-				for(int index = 0; index < state.range(2); ++index) {
-					auto idxbuilder = bsoncxx::builder::stream::document{};
-					auto idx = idxbuilder << ("b"+to_string(index)) << 1;
-					collection.create_index(idx << bsoncxx::builder::stream::finalize);
+                auto idxbuilder = bsoncxx::builder::stream::document{};
+                auto idx = idxbuilder << ("b0") << 1;
+				for(int index = 1; index < state.range(2); ++index) {
+					idx = idx << ("b"+to_string(index)) << 1;
 				}
+
+                collection.create_index(idx << bsoncxx::builder::stream::finalize);
 				// One compounded index (basically just many indexes)
 			}
 		} else {
@@ -144,7 +146,7 @@ static void BM_MONGO_Update(benchmark::State& state, bool transactions, bool tes
 			session.start_transaction();
 		}
 		auto res = collection.update_many(session, query.view(), update.view());
-		count += res->matched_count();
+		count += res->modified_count();
 		if(transactions) {
 			session.commit_transaction();
 		}
