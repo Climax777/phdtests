@@ -133,6 +133,7 @@ static void BM_PQXX_Delete(benchmark::State& state, bool transactions) {
 		} else {
 			delete (pqxx::work*)T;
 		}
+        state.PauseTiming();
 		auto end = std::chrono::high_resolution_clock::now();
 
 		auto elapsed_seconds =
@@ -156,7 +157,9 @@ static void BM_PQXX_Delete(benchmark::State& state, bool transactions) {
 					query.append(");"); // RETURNING _id // Technically to make it more fair, pqxx should return the id's of the inserteds
 				}
 			}
+            N.exec(query);
 		}
+        state.ResumeTiming();
 	}
 
 	if(state.thread_index == 0) {
