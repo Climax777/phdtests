@@ -775,42 +775,51 @@ static void BM_PQXX_Read_Join_Manual(benchmark::State& state, bool transactions)
 			T = N;
 		}
 
+        auto batchQueryProc = [&]() {
+            string selectclause = "SELECT *";
+            string query = selectclause + " FROM bench.read_bench WHERE	";
+            bool first = true;
+            for(auto querydoc: batch) {
+                vector<pqxx::row> a;
+                results.push_back(make_pair(querydoc, a));
+                if(!first)
+                    query += " OR ";
+                query += " (a1 = " + to_string(querydoc.at("a0").as<uint64_t>()) + " AND _id != " + querydoc.at("_id").c_str();
+                query += ") ";
+                first = false;
+            }
+            query += " LIMIT " + to_string(state.range(1));
+            query += ";";
+            auto cursorinternal = T->exec(query);
+            for(auto row: cursorinternal) {
+                for(auto res: results) {
+                    if(res.first.at("a0") == row.at("a0")) {
+                        res.second.push_back(row);
+                        ++count;
+                        break;
+                    }
+                }
+                if(count >= state.range(1))
+                    break;
+            }
+            batch.clear();
+        };
+
 		auto res = T->exec(query);
 		for(auto i: res) {
 			batch.push_back(i);
 			// Our batch is ready...
 			if(batch.size() == state.range(2)) {
-				string selectclause = "SELECT *";
-				string query = selectclause + " FROM bench.read_bench WHERE	";
-				bool first = true;
-				for(auto querydoc: batch) {
-					vector<pqxx::row> a;
-					results.push_back(make_pair(querydoc, a));
-					if(!first)
-						query += " OR ";
-					query += " (a1 = " + to_string(querydoc.at("a0").as<uint64_t>()) + " AND _id != " + querydoc.at("_id").c_str();
-					query += ") ";
-					first = false;
-				}
-				query += " LIMIT " + to_string(state.range(1));
-				query += ";";
-				auto cursorinternal = T->exec(query);
-				for(auto row: cursorinternal) {
-					for(auto res: results) {
-						if(res.first.at("a0") == row.at("a0")) {
-							res.second.push_back(row);
-							++count;
-							break;
-						}
-					}
-					if(count >= state.range(1))
-						break;
-				}
-				batch.clear();
+                batchQueryProc();
 			}
 			if(count >= state.range(1))
 				break;
 		}
+
+        if(!batch.empty()) {
+            batchQueryProc();
+        }
+
 		T->commit();
 		if(transactions) {
 			delete (pqxx::nontransaction*)T;

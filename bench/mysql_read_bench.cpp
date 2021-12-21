@@ -652,43 +652,51 @@ static void BM_MYSQL_Read_Join_Manual(benchmark::State& state, bool	transactions
 		if(transactions) {
 			conn.startTransaction();
 		}
+        auto batchQueryProc = [&] () {
+            string selectclause = "SELECT *";
+            string query = selectclause + " FROM bench.read_bench WHERE	";
+            bool first = true;
+            for(auto querydoc: batch) {
+                vector<mysqlx::Row> a;
+                results.push_back(make_pair(querydoc, a));
+                if(!first)
+                    query += " OR ";
+                query += " (a1 = " + to_string(querydoc.get(1).get<uint32_t>()) + " AND _id != " + to_string(querydoc.get(0).get<uint32_t>());
+                query += ") ";
+                first = false;
+            }
+            query += " LIMIT " + to_string(state.range(1));
+            query += ";";
+            auto cursorinternal = conn.sql(query).execute();
+            for(auto row: cursorinternal) {
+                for(auto res: results) {
+                    if(res.first.get(1).get<uint32_t>() == row.get(0).get<uint32_t>()) {
+                        res.second.push_back(row);
+                        ++count;
+                        break;
+                    }
+                }
+                if(count >= state.range(1))
+                    break;
+            }
+            batch.clear();
+        };
 
 		auto res = conn.sql(query).execute();
 		for(auto i: res) {
 			batch.push_back(i);
 			// Our batch is ready...
 			if(batch.size() == state.range(2)) {
-				string selectclause = "SELECT *";
-				string query = selectclause + " FROM bench.read_bench WHERE	";
-				bool first = true;
-				for(auto querydoc: batch) {
-					vector<mysqlx::Row> a;
-					results.push_back(make_pair(querydoc, a));
-					if(!first)
-						query += " OR ";
-					query += " (a1 = " + to_string(querydoc.get(1).get<uint32_t>()) + " AND _id != " + to_string(querydoc.get(0).get<uint32_t>());
-					query += ") ";
-					first = false;
-				}
-				query += " LIMIT " + to_string(state.range(1));
-				query += ";";
-				auto cursorinternal = conn.sql(query).execute();
-				for(auto row: cursorinternal) {
-					for(auto res: results) {
-						if(res.first.get(1).get<uint32_t>() == row.get(0).get<uint32_t>()) {
-							res.second.push_back(row);
-							++count;
-							break;
-						}
-					}
-					if(count >= state.range(1))
-						break;
-				}
-				batch.clear();
+                batchQueryProc();
 			}
 			if(count >= state.range(1))
 				break;
 		}
+
+        if(!batch.empty()) {
+            batchQueryProc();
+        }
+
 		if(transactions) {
 			conn.commit();
 		}
