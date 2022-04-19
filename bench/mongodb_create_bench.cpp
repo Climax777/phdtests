@@ -40,7 +40,7 @@ static void BM_MONGO_Insert(benchmark::State& state, bool transactions) {
 	std::mt19937 gen(rd()); //Standard mersenne_twister_engine seeded with rd()
 	std::uniform_int_distribution<> dis(0, (1 << 16));
 	// Per thread settings...
-	if(state.thread_index == 0) {
+	if(state.thread_index() == 0) {
 		// This is the first thread, so do initialization here, build indexes etc...
 		collection.drop();
 		collection.create_index(make_document(kvp("_id", 1))); // This creates the collection too
@@ -81,7 +81,7 @@ static void BM_MONGO_Insert(benchmark::State& state, bool transactions) {
 		state.SetIterationTime(elapsed_seconds.count());
 	}
 
-	if(state.thread_index == 0) {
+	if(state.thread_index() == 0) {
 		collection.drop();
 		// This is the first thread, so do destruction here (delete documents etc..)
 	}
@@ -110,7 +110,7 @@ static void BM_MONGO_Insert_Bulk(benchmark::State& state, bool transactions) {
 	std::mt19937 gen(rd()); //Standard mersenne_twister_engine seeded with rd()
 	std::uniform_int_distribution<> dis(0, (1 << 16));
 	// Per thread settings...
-	if(state.thread_index == 0) {
+	if(state.thread_index() == 0) {
 		// This is the first thread, so do initialization here, build indexes etc...
 		collection.drop();
 		collection.create_index(make_document(kvp("_id", 1))); // This creates the collection too
@@ -157,7 +157,7 @@ static void BM_MONGO_Insert_Bulk(benchmark::State& state, bool transactions) {
 		state.SetIterationTime(elapsed_seconds.count());
 	}
 
-	if(state.thread_index == 0) {
+	if(state.thread_index() == 0) {
 		collection.drop();
 		// This is the first thread, so do destruction here (delete documents etc..)
 	}

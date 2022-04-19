@@ -32,3 +32,7 @@ build*
 
 # For OSX users:
 .DS_Store
+
+.cache
+.clangd
+build

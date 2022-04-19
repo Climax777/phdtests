@@ -87,7 +87,7 @@ static void BM_MONGO_Update(benchmark::State& state, bool transactions, bool tes
 	std::uniform_int_distribution<> dis(0, 4);
 	std::uniform_int_distribution<> dis2(1,100);
 	// Per thread settings...
-	if(state.thread_index == 0) {
+	if(state.thread_index() == 0) {
 		// This is the first thread, so do initialization here, build indexes etc...
 		CreateCollection(conn, true); // add double fields, as to measure write perforance without indexes playing a role
 		collection = db.collection("update_bench");
@@ -159,7 +159,7 @@ static void BM_MONGO_Update(benchmark::State& state, bool transactions, bool tes
 		state.SetIterationTime(elapsed_seconds.count());
 	}
 
-	if(state.thread_index == 0) {
+	if(state.thread_index() == 0) {
 		//collection.drop();
 		// This is the first thread, so do destruction here (delete documents etc..)
 		// TODO Figure out way to kill collection after all tests of suite is done

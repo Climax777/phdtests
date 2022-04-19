@@ -31,7 +31,7 @@ static void BM_PQXX_Insert(benchmark::State& state, bool transactions) {
 	std::mt19937 gen(rd()); //Standard mersenne_twister_engine seeded with rd()
 	std::uniform_int_distribution<> dis(0, (1 << 16));
 	// Per thread settings...
-	if(state.thread_index == 0) {
+	if(state.thread_index() == 0) {
 		// This is the first thread, so do initialization here, build indexes etc...
 		try{
 			PostgreSQLDBHandler::CreateDatabase(conn, "bench");
@@ -102,7 +102,7 @@ CREATE TABLE create_bench (
 		state.SetIterationTime(elapsed_seconds.count());
 	}
 
-	if(state.thread_index == 0) {
+	if(state.thread_index() == 0) {
 		PostgreSQLDBHandler::DropTable(conn, "bench", "create_bench");
 		// This is the first thread, so do destruction here (delete documents etc..)
 	}

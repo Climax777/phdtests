@@ -124,7 +124,7 @@ static void BM_PQXX_Read_Count(benchmark::State& state, bool transactions) {
 	std::mt19937 gen(rd()); //Standard mersenne_twister_engine seeded with rd()
 	std::uniform_int_distribution<> dis(0, 4);
 	// Per thread settings...
-	if(state.thread_index == 0) {
+	if(state.thread_index() == 0) {
 		// This is the first thread, so do initialization here, build indexes etc...
 		CreateTable(conn);
         try {
@@ -188,7 +188,7 @@ static void BM_PQXX_Read_Count(benchmark::State& state, bool transactions) {
 		state.SetIterationTime(elapsed_seconds.count());
 	}
 
-	if(state.thread_index == 0) {
+	if(state.thread_index() == 0) {
 		//PostgreSQLDBHandler::DropTable(conn, "bench", "create_bench");
 		// This is the first thread, so do destruction here (delete documents etc..)
 	}
@@ -216,7 +216,7 @@ static void BM_PQXX_Reads(benchmark::State& state, bool transactions) {
 	std::mt19937 gen(rd()); //Standard mersenne_twister_engine seeded with rd()
 	std::uniform_int_distribution<> dis(0, 4);
 	// Per thread settings...
-	if(state.thread_index == 0) {
+	if(state.thread_index() == 0) {
 		// This is the first thread, so do initialization here, build indexes etc...
 		CreateTable(conn);
         try {
@@ -287,7 +287,7 @@ static void BM_PQXX_Reads(benchmark::State& state, bool transactions) {
 		state.SetIterationTime(elapsed_seconds.count());
 	}
 
-	if(state.thread_index == 0) {
+	if(state.thread_index() == 0) {
 		//PostgreSQLDBHandler::DropTable(conn, "bench", "create_bench");
 		// This is the first thread, so do destruction here (delete documents etc..)
 	}
@@ -315,7 +315,7 @@ static void BM_PQXX_Read_Sum(benchmark::State& state, bool transactions) {
 	std::mt19937 gen(rd()); //Standard mersenne_twister_engine seeded with rd()
 	std::uniform_int_distribution<> dis(0, 4);
 	// Per thread settings...
-	if(state.thread_index == 0) {
+	if(state.thread_index() == 0) {
 		// This is the first thread, so do initialization here, build indexes etc...
 		CreateTable(conn);
         try {
@@ -366,7 +366,7 @@ static void BM_PQXX_Read_Sum(benchmark::State& state, bool transactions) {
 		state.SetIterationTime(elapsed_seconds.count());
 	}
 
-	if(state.thread_index == 0) {
+	if(state.thread_index() == 0) {
 		//PostgreSQLDBHandler::DropTable(conn, "bench", "create_bench");
 		// This is the first thread, so do destruction here (delete documents etc..)
 	}
@@ -394,7 +394,7 @@ static void BM_PQXX_Read_Avg(benchmark::State& state, bool transactions) {
 	std::mt19937 gen(rd()); //Standard mersenne_twister_engine seeded with rd()
 	std::uniform_int_distribution<> dis(0, 4);
 	// Per thread settings...
-	if(state.thread_index == 0) {
+	if(state.thread_index() == 0) {
 		// This is the first thread, so do initialization here, build indexes etc...
 		CreateTable(conn);
         try {
@@ -445,7 +445,7 @@ static void BM_PQXX_Read_Avg(benchmark::State& state, bool transactions) {
 		state.SetIterationTime(elapsed_seconds.count());
 	}
 
-	if(state.thread_index == 0) {
+	if(state.thread_index() == 0) {
 		//PostgreSQLDBHandler::DropTable(conn, "bench", "create_bench");
 		// This is the first thread, so do destruction here (delete documents etc..)
 	}
@@ -473,7 +473,7 @@ static void BM_PQXX_Read_Mul(benchmark::State& state, bool transactions) {
 	std::mt19937 gen(rd()); //Standard mersenne_twister_engine seeded with rd()
 	std::uniform_int_distribution<> dis(0, 4);
 	// Per thread settings...
-	if(state.thread_index == 0) {
+	if(state.thread_index() == 0) {
 		// This is the first thread, so do initialization here, build indexes etc...
 		CreateTable(conn);
         try {
@@ -524,7 +524,7 @@ static void BM_PQXX_Read_Mul(benchmark::State& state, bool transactions) {
 		state.SetIterationTime(elapsed_seconds.count());
 	}
 
-	if(state.thread_index == 0) {
+	if(state.thread_index() == 0) {
 		//PostgreSQLDBHandler::DropTable(conn, "bench", "create_bench");
 		// This is the first thread, so do destruction here (delete documents etc..)
 	}
@@ -552,7 +552,7 @@ static void BM_PQXX_Read_Sort(benchmark::State& state, bool transactions) {
 	std::mt19937 gen(rd()); //Standard mersenne_twister_engine seeded with rd()
 	std::uniform_int_distribution<> dis(0, 4);
 	// Per thread settings...
-	if(state.thread_index == 0) {
+	if(state.thread_index() == 0) {
 		// This is the first thread, so do initialization here, build indexes etc...
 		CreateTable(conn);
 		try {
@@ -612,7 +612,7 @@ static void BM_PQXX_Read_Sort(benchmark::State& state, bool transactions) {
 		state.SetIterationTime(elapsed_seconds.count());
 	}
 
-	if(state.thread_index == 0) {
+	if(state.thread_index() == 0) {
 		//PostgreSQLDBHandler::DropTable(conn, "bench", "create_bench");
 		// This is the first thread, so do destruction here (delete documents etc..)
 	}
@@ -640,7 +640,7 @@ static void BM_PQXX_Read_Join(benchmark::State& state, bool transactions) {
 	std::mt19937 gen(rd()); //Standard mersenne_twister_engine seeded with rd()
 	std::uniform_int_distribution<> dis(0, 4);
 	// Per thread settings...
-	if(state.thread_index == 0) {
+	if(state.thread_index() == 0) {
 		// This is the first thread, so do initialization here, build indexes etc...
 		CreateTable(conn);
         try {
@@ -700,7 +700,7 @@ static void BM_PQXX_Read_Join(benchmark::State& state, bool transactions) {
 		state.SetIterationTime(elapsed_seconds.count());
 	}
 
-	if(state.thread_index == 0) {
+	if(state.thread_index() == 0) {
 		//PostgreSQLDBHandler::DropTable(conn, "bench", "create_bench");
 		// This is the first thread, so do destruction here (delete documents etc..)
 	}
@@ -729,7 +729,7 @@ static void BM_PQXX_Read_Join_Manual(benchmark::State& state, bool transactions)
 	std::mt19937 gen(rd()); //Standard mersenne_twister_engine seeded with rd()
 	std::uniform_int_distribution<> dis(0, 4);
 	// Per thread settings...
-	if(state.thread_index == 0) {
+	if(state.thread_index() == 0) {
 		// This is the first thread, so do initialization here, build indexes etc...
 		CreateTable(conn);
         try {
@@ -835,7 +835,7 @@ static void BM_PQXX_Read_Join_Manual(benchmark::State& state, bool transactions)
 		state.SetIterationTime(elapsed_seconds.count());
 	}
 
-	if(state.thread_index == 0) {
+	if(state.thread_index() == 0) {
 		//PostgreSQLDBHandler::DropTable(conn, "bench", "create_bench");
 		// This is the first thread, so do destruction here (delete documents etc..)
 	}

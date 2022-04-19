@@ -89,7 +89,7 @@ static void BM_MYSQL_Update(benchmark::State& state, bool transactions, bool tes
 	std::uniform_int_distribution<> dis(0, 4);
 	std::uniform_int_distribution<> dis2(1,100);
 	// Per thread settings...
-	if(state.thread_index == 0) {
+	if(state.thread_index() == 0) {
 		// This is the first thread, so do initialization here, build indexes etc...
 		CreateTable(conn, true);
 		try {
@@ -164,7 +164,7 @@ static void BM_MYSQL_Update(benchmark::State& state, bool transactions, bool tes
 		state.SetIterationTime(elapsed_seconds.count());
 	}
 
-	if(state.thread_index == 0) {
+	if(state.thread_index() == 0) {
 		//MySQLDBHandler::DropTable(conn, "bench", "create_bench");
 		// This is the first thread, so do destruction here (delete documents etc..)
 	}

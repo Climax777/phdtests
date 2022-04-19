@@ -72,7 +72,7 @@ static void CreateCollection(mongocxx::pool::entry& conn, std::string postfix = 
 static void BM_MONGO_Delete(benchmark::State& state, bool transactions) {
 	auto conn = MongoDBHandler::GetConnection();
 	auto db = conn->database("bench");
-	std::string postfix = std::to_string(state.thread_index);
+	std::string postfix = std::to_string(state.thread_index());
 	auto collection = db.collection("delete_bench" + postfix);
 	std::random_device rd;  //Will be used to obtain a seed for the random number engine
 	std::mt19937 gen(rd()); //Standard mersenne_twister_engine seeded with rd()
@@ -129,7 +129,7 @@ static void BM_MONGO_Delete(benchmark::State& state, bool transactions) {
 		state.ResumeTiming();
 	}
 
-	if(state.thread_index == 0) {
+	if(state.thread_index() == 0) {
 		//collection.drop();
 		// This is the first thread, so do destruction here (delete documents etc..)
 		// TODO Figure out way to kill collection after all tests of suite is done

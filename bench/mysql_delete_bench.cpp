@@ -64,7 +64,7 @@ CREATE TABLE )|" + string("delete_bench") + postfix +R"|( (
 
 static void BM_MYSQL_Delete(benchmark::State& state, bool transactions) {
 	auto conn = MySQLDBHandler::GetConnection();	
-	std::string postfix = std::to_string(state.thread_index);
+	std::string postfix = std::to_string(state.thread_index());
 	std::random_device rd;  //Will be used to obtain a seed for the random number engine
 	std::mt19937 gen(rd()); //Standard mersenne_twister_engine seeded with rd()
 	std::uniform_int_distribution<> dis(0, 4);
@@ -127,7 +127,7 @@ static void BM_MYSQL_Delete(benchmark::State& state, bool transactions) {
 		}
 	}
 
-	if(state.thread_index == 0) {
+	if(state.thread_index() == 0) {
 		//MySQLDBHandler::DropTable(conn, "bench", "create_bench");
 		// This is the first thread, so do destruction here (delete documents etc..)
 	}
