@@ -31,6 +31,7 @@ set(bench_cpp
 	mysql_compound_bench.cpp
 	mongodb_compound_bench.cpp
 	precalculate.cpp
+    tpc/tpchelpers.cpp
 )
 
 add_executable(bench_dbphd ${bench_cpp})
