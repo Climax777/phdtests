@@ -5,6 +5,7 @@
 #include <vector>
 #include <cassert>
 #include <chrono>
+#include <array>
 
 
 namespace tpcc {
@@ -33,91 +34,6 @@ struct NuRandC {
 };
 
 class ScaleParameters;
-
-struct StockLevelParams {
-    int wId;
-    int dId;
-    int threshold;
-};
-struct PaymentParams {
-    int wId;
-    int dId;
-    double hAmount;
-    int cWId;
-    int cDId;
-    int cId;
-    string cLast;
-    std::chrono::time_point<std::chrono::system_clock> hDate;
-};
-
-struct OrderStatusParams {
-    int wId;
-    int dId;
-    int cId;
-    string cLast;
-};
-
-struct NewOrderParams {
-    int wId;
-    int dId;
-    int cId;
-    std::chrono::time_point<std::chrono::system_clock> oEntryDate;
-    std::vector<int> iIds;
-    std::vector<int> iIWds;
-    std::vector<int> iQtys;
-};
-
-struct DeliveryParams {
-    int wId;
-    int oCarrierId;
-    std::chrono::time_point<std::chrono::system_clock> olDeliveryD;
-};
-class RandomHelper {
-public:
-    RandomHelper() : gen(rd()) {
-    }
-
-    int number(int l, int u);
-    int numberExcluding(int l, int u, int excluding);
-    void seed(int s);
-
-    std::string alphaString(int lower, int upper);
-    std::string numString(int lower, int upper);
-
-    std::string lastName(int num);
-    std::string randomLastName(int maxcid);
-    void setCValues(const NuRandC& c) {
-        cValues = c;
-    }
-
-    int NuRand(int A, int x, int y);
-
-    template<typename T>
-    T fixedPoint(int digits, T u, T l);
-
-    std::vector<int> uniqueIds(int num, int min, int max);
-
-// Per execution generators
-    TransactionType nextType();
-    int makeWarehouseId(const ScaleParameters& params);
-    int makeDistrictId(const ScaleParameters& params);
-    int makeCustomerId(const ScaleParameters& params);
-    int makeItemId(const ScaleParameters& params);
-    void generateDeliveryParams(const ScaleParameters& params, DeliveryParams& out);
-    void generateNewOrderParams(const ScaleParameters& params, NewOrderParams& out);
-    void generateOrderStatusParams(const ScaleParameters& params, OrderStatusParams& out);
-    void generatePaymentParams(const ScaleParameters& params, PaymentParams& out);
-    void generateStockLevelParams(const ScaleParameters& params, StockLevelParams& out);
-
-private:
-    std::string generateString(int lower, int upper, char base, int num);
-    std::random_device rd;
-    std::mt19937 gen;
-
-    NuRandC cValues;
-};
-
-static RandomHelper random;
 
 // Constants
 static const int MONEY_DECIMALS = 2;
@@ -215,6 +131,208 @@ static const double MAX_PAYMENT = 5000.0;
 
 // Indicates "brand" items and stock in i_data and s_data
 static const char* ORIGINAL_STRING = "ORIGINAL";
+
+struct StockLevelParams {
+    int wId;
+    int dId;
+    int threshold;
+};
+struct PaymentParams {
+    int wId;
+    int dId;
+    double hAmount;
+    int cWId;
+    int cDId;
+    int cId;
+    std::string cLast;
+    std::chrono::time_point<std::chrono::system_clock> hDate;
+};
+
+struct OrderStatusParams {
+    int wId;
+    int dId;
+    int cId;
+    std::string cLast;
+};
+
+struct NewOrderParams {
+    int wId;
+    int dId;
+    int cId;
+    std::chrono::time_point<std::chrono::system_clock> oEntryDate;
+    std::vector<int> iIds;
+    std::vector<int> iIWds;
+    std::vector<int> iQtys;
+};
+
+struct DeliveryParams {
+    int wId;
+    int oCarrierId;
+    std::chrono::time_point<std::chrono::system_clock> olDeliveryD;
+};
+
+struct Item {
+    int iId;
+    int iImId;
+    std::string iName;
+    double iPrice;
+    std::string iData;
+};
+
+struct StreetAddress {
+    std::string street1;
+    std::string street2;
+    std::string city;
+    std::string state;
+    std::string zip;
+};
+
+struct Warehouse {
+    int wId;
+    double wTax;
+    double wYtd;
+    std::string wName;
+    StreetAddress wAddress;
+};
+
+struct District {
+    int dId;
+    int dWId;
+    double dTax;
+    double dYtd;
+    std::string dName;
+    StreetAddress dAddress;
+    int dNextOId;
+};
+
+struct Customer {
+    int cId;
+    int cWId;
+    int cDId;
+    std::string cFirst;
+    std::string cMiddle;
+    std::string cLast;
+    std::string cPhone;
+    StreetAddress cAddress;
+    std::chrono::time_point<std::chrono::system_clock> cSince;
+    std::string cCredit;
+    double cCreditLimit;
+    double cDiscount;
+    double cBalance;
+    double cYtdPayment;
+    int cPaymentCnt;
+    int cDeliveryCnt;
+    std::string cData;
+};
+
+struct Order {
+    int oId;
+    int oWId;
+    int oDId;
+    int oCId;
+    int oOlCnt;
+    std::chrono::time_point<std::chrono::system_clock> oEntryD;
+    int oCarrierId;
+    bool oAllLocal;
+};
+
+struct OrderLine {
+    int olOId;
+    int olNumber;
+    int olWId;
+    int olDId;
+    int olIId;
+    int olSupplyWId;
+    std::chrono::time_point<std::chrono::system_clock> olDeliveryD;
+    int olQuantity;
+    double olAmount;
+    std::string olDistInfo;
+};
+
+struct Stock {
+    int sWId;
+    int sIId;
+    int sQuantity;
+    int sYtd;
+    int sOrderCnt;
+    int sRemoteCnt;
+    std::string sData;
+    std::array<std::string, DISTRICTS_PER_WAREHOUSE> sDists;
+};
+
+struct History {
+    int hWId;
+    int hDId;
+    int hCWId;
+    int hCDId;
+    int hCId;
+    std::chrono::time_point<std::chrono::system_clock> hDate;
+    double hAmount;
+    std::string hData;
+};
+class RandomHelper {
+public:
+    RandomHelper() : gen(rd()) {
+    }
+
+    int number(int l, int u);
+    int numberExcluding(int l, int u, int excluding);
+    void seed(int s);
+
+    std::string alphaString(int lower, int upper);
+    std::string numString(int lower, int upper);
+
+    std::string lastName(int num);
+    std::string randomLastName(int maxcid);
+    void setCValues(const NuRandC& c) {
+        cValues = c;
+    }
+
+    int NuRand(int A, int x, int y);
+
+    template<typename T>
+    T fixedPoint(int digits, T u, T l);
+
+    std::vector<int> uniqueIds(int num, int min, int max);
+
+// Per execution generators
+    TransactionType nextTransactionType();
+    int makeWarehouseId(const ScaleParameters& params);
+    int makeDistrictId(const ScaleParameters& params);
+    int makeCustomerId(const ScaleParameters& params);
+    int makeItemId(const ScaleParameters& params);
+    // Transactions
+    void generateDeliveryParams(const ScaleParameters& params, DeliveryParams& out);
+    void generateNewOrderParams(const ScaleParameters& params, NewOrderParams& out);
+    void generateOrderStatusParams(const ScaleParameters& params, OrderStatusParams& out);
+    void generatePaymentParams(const ScaleParameters& params, PaymentParams& out);
+    void generateStockLevelParams(const ScaleParameters& params, StockLevelParams& out);
+
+    // Loading
+    void generateItem(int id, bool original, Item& out);
+    void generateWarehouse(int wid, Warehouse& out);
+    void generateDistrict(int did, int wid, int nextOId, District& out);
+    void generateCustomer(int cwid, int cdid, int cid, bool badCredit, Customer& out);
+    void generateOrder(int owid, int odid, int oid, int ocid, int oilcnt, bool newOrder, Order& out);
+    void generateOrderLine(const ScaleParameters& params, int olwid, int oldid, int oloid, int olnumber, int maxitems, bool newOrder, OrderLine& out);
+    void generateStock(int swid, int siid, bool original, Stock& out);
+    void generateHistory(int hcwid, int hcdid, int hcid, History& out);
+private:
+    std::string generateString(int lower, int upper, char base, int num);
+
+    void generateAddress(StreetAddress& out);
+    double generateTax();
+    std::string generateZip();
+    void fillOriginal(std::string& data);
+
+    std::random_device rd;
+    std::mt19937 gen;
+
+    NuRandC cValues;
+};
+
+static RandomHelper random;
+
 
 struct ScaleParameters {
     ScaleParameters(int Items, int Warehouses, int DistrictsPerWarehouse, int CustomersPerDistrict, int NewOrdersPerDistrict)
