@@ -1,4 +1,4 @@
-#include "tpchelpers.hpp"
+#include "dbphd/tpc/tpchelpers.hpp"
 #include <algorithm>
 #include <cassert>
 #include <iostream>
@@ -14,15 +14,15 @@ bool NuRandC::isValid(int cRun, int cLoad) {
 }
 
 NuRandC NuRandC::createRandom() {
-  return NuRandC(random.number(0, 255), random.number(0, 1023),
-                 random.number(0, 8191));
+  return NuRandC(randomHelper.number(0, 255), randomHelper.number(0, 1023),
+                 randomHelper.number(0, 8191));
 }
 
 NuRandC NuRandC::createRandomForRun(const NuRandC &cLoad) {
   NuRandC cTest = createRandom();
 
   while (!isValid(cTest.cLast, cLoad.cLast)) {
-    cTest.cLast = random.number(0, 255);
+    cTest.cLast = randomHelper.number(0, 255);
   }
   return cTest;
 }
@@ -65,6 +65,9 @@ string RandomHelper::generateString(int lower, int upper, char base, int num) {
 
 int RandomHelper::NuRand(int A, int x, int y) {
     assert(x <= y);
+    if(cValues.isUninitialized()) {
+        setCValues(NuRandC::createRandom());
+    }
   int C = 0;
   switch (A) {
   case 255:
@@ -123,7 +126,7 @@ vector<int> RandomHelper::uniqueIds(int num, int min, int max) {
   vector<int> results;
   // TODO asserts...
   assert(max - min + 1 >= num); // Number of unique values has to fit within the range
-  results.resize(num);
+  results.reserve(num);
   for (int i = 0; i < num; ++i) {
     int val = INT32_MIN;
     while (val == INT32_MIN ||

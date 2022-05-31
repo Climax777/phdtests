@@ -2,6 +2,7 @@
 #define TPCHELPERS
 #include <random>
 #include <string>
+#include <sstream>
 #include <vector>
 #include <cassert>
 #include <chrono>
@@ -20,13 +21,20 @@ enum class TransactionType {
 class Random;
 
 struct NuRandC {
-    NuRandC() : cLast(0), cId(0), orderLineItemID(0) {
+    NuRandC() : cLast(INT32_MIN), cId(INT32_MIN), orderLineItemID(INT32_MIN) {
     }
   NuRandC(int cLast, int cId, int orderLineItemID)
       : cLast(cLast), cId(cId), orderLineItemID(orderLineItemID) {}
   int cLast;
   int cId;
   int orderLineItemID;
+
+void reset() {
+    cLast = cId = orderLineItemID = INT32_MIN;
+}
+    bool isUninitialized() {
+        return cLast == INT32_MIN || cId == INT32_MIN || orderLineItemID == INT32_MIN;
+    }
 
     static bool isValid(int cRun, int cLoad);
   static NuRandC createRandom();
@@ -177,6 +185,12 @@ struct Item {
     std::string iName;
     double iPrice;
     std::string iData;
+
+    std::string toString() {
+        std::stringstream str;
+        str << "Item: " << iId << " " << iName << " " << iPrice << " " << iImId << " " << iData << "\r\n";
+        return str.str();
+    }
 };
 
 struct StreetAddress {
@@ -185,6 +199,12 @@ struct StreetAddress {
     std::string city;
     std::string state;
     std::string zip;
+
+    std::string toString() {
+        std::stringstream str;
+        str << street1 << " " << street2 << " " << city << " " << state << " " << zip;
+        return str.str();
+    }
 };
 
 struct Warehouse {
@@ -193,6 +213,12 @@ struct Warehouse {
     double wYtd;
     std::string wName;
     StreetAddress wAddress;
+
+    std::string toString() {
+        std::stringstream str;
+        str << "Warehouse: " << wId << " " << wTax << " " << wYtd << " " << wName << " " << wAddress.toString() << "\r\n";
+        return str.str();
+    }
 };
 
 struct District {
@@ -203,6 +229,12 @@ struct District {
     std::string dName;
     StreetAddress dAddress;
     int dNextOId;
+
+    std::string toString() {
+        std::stringstream str;
+        str << "District: " << dId << " " << dWId << " " << dTax << " " << dYtd << " " << dName << " " << dNextOId << " " << dAddress.toString() << "\r\n";
+        return str.str();
+    }
 };
 
 struct Customer {
@@ -331,7 +363,7 @@ private:
     NuRandC cValues;
 };
 
-static RandomHelper random;
+RandomHelper randomHelper;
 
 
 struct ScaleParameters {

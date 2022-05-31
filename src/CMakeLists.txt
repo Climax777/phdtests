@@ -5,6 +5,7 @@ set(dbphd_src
 	mongodb/mongodb.cpp
 	mysqldb/mysqldb.cpp
 	postgresql/postgresql.cpp
+    tpc/tpchelpers.cpp
 )
 message(STATUS "BSONCXX: ${BSONCXX_INCLUDE_DIRS}")
 # Compile the library

@@ -8,6 +8,7 @@ set(test_src
   dbphd_mysql_test.cpp
   dbphd_mongo_test.cpp
   dbphd_postgres_test.cpp
+  dbphd_tpcchelpers_test.cpp
 )
 
 add_executable(test_dbphd ${test_src})

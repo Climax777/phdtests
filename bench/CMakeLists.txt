@@ -27,11 +27,13 @@ set(bench_cpp
 	postgres_delete_bench.cpp
 	mysql_delete_bench.cpp
 	mongodb_delete_bench.cpp
-	postgres_compound_bench.cpp
-	mysql_compound_bench.cpp
-	mongodb_compound_bench.cpp
+	postgres_tpcc_bench.cpp
+	postgres_tpcc_modern_bench.cpp
+	mysql_tpcc_bench.cpp
+	mysql_tpcc_modern_bench.cpp
+	mongodb_tpcc_bench.cpp
+	mongodb_tpcc_modern_bench.cpp
 	precalculate.cpp
-    tpc/tpchelpers.cpp
 )
 
 add_executable(bench_dbphd ${bench_cpp})
