@@ -7,6 +7,7 @@
 #include <cassert>
 #include <chrono>
 #include <array>
+#include <algorithm>
 
 
 namespace tpcc {
@@ -173,10 +174,17 @@ struct NewOrderParams {
     std::vector<int> iQtys;
 };
 
+
 struct DeliveryParams {
     int wId;
     int oCarrierId;
     std::chrono::time_point<std::chrono::system_clock> olDeliveryD;
+};
+
+struct NewOrder {
+    int oId;
+    int wId;
+    int dId;
 };
 
 struct Item {
@@ -186,10 +194,9 @@ struct Item {
     double iPrice;
     std::string iData;
 
-    std::string toString() {
-        std::stringstream str;
-        str << "Item: " << iId << " " << iName << " " << iPrice << " " << iImId << " " << iData << "\r\n";
-        return str.str();
+    friend auto operator<<(std::ostream &os, Item const &m)
+        -> std::ostream & {
+        return os << "Item: " << m.iId << " " << m.iName << " " << m.iPrice << " " << m.iImId << " " << m.iData << "\r\n";
     }
 };
 
@@ -200,10 +207,9 @@ struct StreetAddress {
     std::string state;
     std::string zip;
 
-    std::string toString() {
-        std::stringstream str;
-        str << street1 << " " << street2 << " " << city << " " << state << " " << zip;
-        return str.str();
+    friend auto operator<<(std::ostream &os, StreetAddress const &m)
+        -> std::ostream & {
+        return os << m.street1 << " " << m.street2 << " " << m.city << " " << m.state << " " << m.zip;
     }
 };
 
@@ -214,10 +220,9 @@ struct Warehouse {
     std::string wName;
     StreetAddress wAddress;
 
-    std::string toString() {
-        std::stringstream str;
-        str << "Warehouse: " << wId << " " << wTax << " " << wYtd << " " << wName << " " << wAddress.toString() << "\r\n";
-        return str.str();
+    friend auto operator<<(std::ostream &os, Warehouse const &m)
+        -> std::ostream & {
+        return os << "Warehouse: " << m.wId << " " << m.wTax << " " << m.wYtd << " " << m.wName << " " << m.wAddress << "\r\n";
     }
 };
 
@@ -230,10 +235,9 @@ struct District {
     StreetAddress dAddress;
     int dNextOId;
 
-    std::string toString() {
-        std::stringstream str;
-        str << "District: " << dId << " " << dWId << " " << dTax << " " << dYtd << " " << dName << " " << dNextOId << " " << dAddress.toString() << "\r\n";
-        return str.str();
+    friend auto operator<<(std::ostream &os, District const &m)
+        -> std::ostream & {
+        return os << "District: " << m.dId << " " << m.dWId << " " << m.dTax << " " << m.dYtd << " " << m.dName << " " << m.dNextOId << " " << m.dAddress << "\r\n";
     }
 };
 
@@ -255,6 +259,16 @@ struct Customer {
     int cPaymentCnt;
     int cDeliveryCnt;
     std::string cData;
+
+    friend auto operator<<(std::ostream &os, Customer const &m)
+        -> std::ostream & {
+        return os << "Customer: " << m.cId << " " << m.cWId << " " << m.cDId << " " 
+            << m.cFirst << " " << m.cMiddle << " " << m.cLast << " " << m.cPhone << " " 
+            << m.cAddress << " " << m.cSince.time_since_epoch().count() << " " << m.cCredit << " " << m.cCreditLimit 
+            << " " << m.cDiscount << " " << m.cBalance << " " << m.cYtdPayment << " " << m.cPaymentCnt 
+            << " " << m.cDeliveryCnt << " " << m.cData
+            << "\r\n";
+    }
 };
 
 struct Order {
@@ -266,6 +280,14 @@ struct Order {
     std::chrono::time_point<std::chrono::system_clock> oEntryD;
     int oCarrierId;
     bool oAllLocal;
+
+    friend auto operator<<(std::ostream &os, Order const &m)
+        -> std::ostream & {
+        return os << "Order: " << m.oId << " " << m.oWId << " " << m.oDId 
+        << " " << m.oCId << " " << m.oOlCnt << " " << m.oEntryD.time_since_epoch().count()
+        << " " << m.oCarrierId << " " << m.oAllLocal
+        << "\r\n";
+    }
 };
 
 struct OrderLine {
@@ -279,6 +301,14 @@ struct OrderLine {
     int olQuantity;
     double olAmount;
     std::string olDistInfo;
+
+    friend auto operator<<(std::ostream &os, OrderLine const &m)
+        -> std::ostream & {
+        return os << "OrderLine: " << m.olIId << " " << m.olNumber << " " << m.olWId << " " << m.olDId
+        << " " << m.olIId << " " << m.olSupplyWId << " " << m.olDeliveryD.time_since_epoch().count()
+        << " " << m.olQuantity << " " << m.olAmount << " " <<  m.olDistInfo
+        << "\r\n";
+    }
 };
 
 struct Stock {
@@ -290,6 +320,17 @@ struct Stock {
     int sRemoteCnt;
     std::string sData;
     std::array<std::string, DISTRICTS_PER_WAREHOUSE> sDists;
+
+    friend auto operator<<(std::ostream &os, Stock const &m)
+        -> std::ostream & {
+        os << "Stock: " << m.sWId << " " << m.sIId << " " << m.sQuantity << " "
+        << m.sYtd << " " << m.sOrderCnt << " " << m.sRemoteCnt << " " << m.sData;
+
+        for(auto dist: m.sDists) {
+            os << " " << dist;
+        }
+        return os << "\r\n";
+    }
 };
 
 struct History {
@@ -301,12 +342,23 @@ struct History {
     std::chrono::time_point<std::chrono::system_clock> hDate;
     double hAmount;
     std::string hData;
+    friend auto operator<<(std::ostream &os, History const &m)
+        -> std::ostream & {
+        return os << "History: " << m.hWId << " " << m.hDId << " " << m.hCId << " "
+        << m.hCWId << " " << m.hCDId << " " << m.hCId << " " << m.hDate.time_since_epoch().count() <<
+        " " << m.hAmount << " " << m.hData
+        << "\r\n";
+    }
 };
 class RandomHelper {
 public:
     RandomHelper() : gen(rd()) {
     }
 
+    template<typename T>
+    void shuffle(T& container){
+        std::shuffle(container.begin(), container.end(), this->gen);
+    }
     int number(int l, int u);
     int numberExcluding(int l, int u, int excluding);
     void seed(int s);
@@ -322,8 +374,14 @@ public:
 
     int NuRand(int A, int x, int y);
 
-    template<typename T>
-    T fixedPoint(int digits, T u, T l);
+    template <typename T> T fixedPoint(int digits, T u, T l) {
+        assert(digits > 0);
+        assert(l < u);
+        T multiplier = pow(10, digits);
+        int intl = static_cast<int>(l * multiplier + 0.5);
+        int intu = static_cast<int>(u * multiplier + 0.5);
+        return (T)number(intl, intu) / multiplier;
+    }
 
     std::vector<int> uniqueIds(int num, int min, int max);
 
