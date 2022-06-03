@@ -8,7 +8,8 @@
 #include <chrono>
 #include <array>
 #include <algorithm>
-
+#include <fmt/core.h>
+#include <fmt/chrono.h>
 
 namespace tpcc {
 enum class TransactionType {
@@ -352,7 +353,7 @@ struct History {
 };
 class RandomHelper {
 public:
-    RandomHelper() : gen(rd()) {
+    RandomHelper()  {
     }
 
     template<typename T>
@@ -415,8 +416,8 @@ private:
     std::string generateZip();
     void fillOriginal(std::string& data);
 
-    std::random_device rd;
-    std::mt19937 gen;
+    thread_local static std::random_device rd;
+    thread_local static std::mt19937 gen;
 
     NuRandC cValues;
 };

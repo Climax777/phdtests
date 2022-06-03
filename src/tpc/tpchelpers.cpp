@@ -12,6 +12,8 @@ bool NuRandC::isValid(int cRun, int cLoad) {
     int cDelta = abs(cRun - cLoad);
     return 65 <= cDelta && cDelta <= 119 && cDelta != 96 && cDelta != 112;
 }
+thread_local random_device RandomHelper::rd;
+thread_local mt19937 RandomHelper::gen(rd()); // "static" does not appear here
 
 NuRandC NuRandC::createRandom() {
     return NuRandC(randomHelper.number(0, 255), randomHelper.number(0, 1023),
@@ -29,7 +31,7 @@ NuRandC NuRandC::createRandomForRun(const NuRandC &cLoad) {
 
 int RandomHelper::number(int l, int u) {
     uniform_int_distribution<> dist(l, u);
-    return dist(gen);
+    return dist(gen); 
 }
 
 int RandomHelper::numberExcluding(int l, int u, int excluding) {

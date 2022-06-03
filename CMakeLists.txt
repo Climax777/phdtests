@@ -112,7 +112,6 @@ set(CONCPP_LIBS
 
 find_package(Threads REQUIRED)
 find_package(Boost)
-find_package(Math)
 
 pkg_check_modules(PQXX libpqxx)
 pkg_check_modules(PQ libpq)
@@ -120,6 +119,8 @@ pkg_check_modules(MONGOCXX libmongocxx)
 pkg_check_modules(BSONCXX libbsoncxx)
 
 include_directories(. include ${Boost_INCLUDE_DIRS} ${PQXX_INCLUDE_DIRS} ${CONCPP_INCLUDE_DIR} ${MONGOCXX_INCLUDE_DIRS})
+
+find_package(fmt)
 
 set(CMAKE_CXX_STANDARD 17) # cmake 3.1 supports '" 98', '11' or '14'. cmake 3.8 or later support '17'.
 set(CMAKE_CXX_STANDARD_REQUIRED ON)

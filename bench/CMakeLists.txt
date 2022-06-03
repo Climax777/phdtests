@@ -8,8 +8,10 @@ if (OPENMP_FOUND)
     set (CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${OpenMP_EXE_LINKER_FLAGS}")
 endif()
 
+
 add_subdirectory(benchmark)
 include_directories(benchmark/include)
+find_package(fmt)
 
 set(bench_cpp
 	dbphd_bench.cpp
@@ -40,9 +42,10 @@ add_executable(bench_dbphd ${bench_cpp})
 target_include_directories(bench_dbphd PUBLIC include ${CMAKE_THREAD_LIBS_INIT} ${MATH_LIBS} ${PQXX_INCLUDE_DIRS} ${CONCPP_INCLUDE_DIR} ${MONGOCXX_INCLUDE_DIRS} ${BSONCXX_INCLUDE_DIRS})
 
 target_link_libraries(bench_dbphd
+PRIVATE 
   benchmark
   ${DBPHD_LIB_NAME}
   ${CMAKE_THREAD_LIBS_INIT}
   ${MATH_LIBS}
 ${PQXX_LDFLAGS} ${PQ_LDFLAGS} ${CONCPP_LIBS} ${MONGOCXX_LDFLAGS}
-)
+fmt::fmt)
