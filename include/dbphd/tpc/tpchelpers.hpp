@@ -177,6 +177,7 @@ struct NewOrderParams {
 
 
 struct DeliveryParams {
+    int dId;
     int wId;
     int oCarrierId;
     std::chrono::time_point<std::chrono::system_clock> olDeliveryD;

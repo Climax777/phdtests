@@ -15,6 +15,8 @@ using namespace tpcc;
 #include <deque>
 #include <fmt/core.h>
 #include <fmt/chrono.h>
+#include <thread>
+#include <algorithm>
 
 //#define PRINT_BENCH_GEN
 using namespace std;
@@ -67,10 +69,11 @@ this point. w.commit();
 BENCHMARK(BM_PQXX_SelectTransact);*/
 
 static void LoadBenchmark(std::shared_ptr<pqxx::connection> conn,
-                          const ScaleParameters &params, int clients) {
+                          ScaleParameters &params, int clients) {
     static volatile bool created = false;
     if (created)
         return;
+    params = ScaleParameters::makeDefault(4);
     cout << endl << "Creating Postgres old TPC-C Tables with " << clients << " threads ..." << endl;
     cout.flush();
     auto start = chrono::steady_clock::now();
@@ -725,6 +728,9 @@ ALTER TABLE "stock" ADD FOREIGN KEY ("s_w_id") REFERENCES "warehouse" ("w_id");
 ALTER TABLE "order_line" ADD FOREIGN KEY ("ol_supply_w_id", "ol_i_id") REFERENCES "stock" ("s_w_id", "s_i_id");
 
 ALTER TABLE "new_order" ADD FOREIGN KEY ("no_w_id", "no_d_id", "no_o_id") REFERENCES "order" ("o_w_id", "o_d_id", "o_id");
+
+CREATE INDEX idx_customer_name ON customer (c_w_id,c_d_id,c_last,c_first);
+CREATE INDEX idx_order ON "order" (o_w_id,o_d_id,o_c_id,o_id);
 )|";
 // TODO indexing
     {
@@ -789,15 +795,469 @@ ALTER TABLE "new_order" ADD FOREIGN KEY ("no_w_id", "no_d_id", "no_o_id") REFERE
   */
 }
 
+bool doDelivery(benchmark::State &state, ScaleParameters& params, DeliveryParams& dparams, pqxx::transaction<>& transaction) {
+    string newOrderQuery = fmt::format("SELECT * from bench.new_order WHERE no_d_id = {:d} AND no_w_id = {:d} ORDER BY no_o_id ASC LIMIT 1;", dparams.dId, dparams.wId);
+    pqxx::result no_result = transaction.exec(newOrderQuery, "DeliveryTXNNewOrder");
+
+    if(no_result.size() == 0) {
+        // No orders for this district. TODO report when >1%
+        if(state.counters.count("no_new_orders") == 0)
+            state.counters["no_new_orders"] = benchmark::Counter(1);
+        else {
+            state.counters["no_new_orders"].value++;
+        }
+        return true;
+    }
+
+    int oId = no_result.front().at("no_o_id").as<int>();
+    assert(oId >= 1);
+
+    string orderQuery = fmt::format("SELECT o_c_id,o_id,o_d_id,o_w_id from bench.\"order\" WHERE o_d_id = {:d} AND o_w_id = {:d} AND o_id = {:d} LIMIT 1;", dparams.dId, dparams.wId, oId);
+
+    pqxx::row o_result = transaction.exec1(orderQuery, "DeliveryTXNOrder");
+    int cId = o_result.at("o_c_id").as<int>();
+
+    string orderLinesQuery = fmt::format("SELECT ol_amount from bench.order_line WHERE ol_d_id = {:d} AND ol_w_id = {:d} AND ol_o_id = {:d};", dparams.dId, dparams.wId, oId);
+
+    pqxx::result ol_result = transaction.exec(orderLinesQuery, "DeliveryTXNOrderLines");
+    assert(ol_result.size() > 0);
+    double total = 0;
+    for(auto ol: ol_result) {
+        total += ol.at("ol_amount").as<double>();
+    }
+
+    string orderUpdate = fmt::format("UPDATE bench.\"order\" SET o_carrier_id = {:d} WHERE o_d_id = {:d} AND o_w_id = {:d} AND o_id = {:d};", dparams.oCarrierId, dparams.dId, dparams.wId, oId);
+
+    pqxx::result o_update_result = transaction.exec(orderUpdate, "DeliveryTXNUpdateOrder");
+    assert(o_update_result.affected_rows() == 1);
+
+    string orderLineUpdate = fmt::format("UPDATE bench.order_line SET ol_delivery_d = '{:%Y-%m-%d %H:%M:%S}' WHERE ol_d_id = {:d} AND ol_w_id = {:d} AND ol_o_id = {:d};", dparams.olDeliveryD, dparams.dId, dparams.wId, oId);
+
+    pqxx::result ol_update_result = transaction.exec(orderLineUpdate, "DeliveryTXNUpdateOrderLines");
+    assert(ol_update_result.affected_rows() > 0);
+
+    string custUpdate = fmt::format("UPDATE bench.customer SET c_balance = c_balance + {:f} WHERE c_d_id = {:d} AND c_w_id = {:d} AND c_id = {:d};", total, dparams.dId, dparams.wId, cId);
+
+    pqxx::result cust_update_result = transaction.exec(custUpdate, "DeliveryTXNUpdateCust");
+    assert(cust_update_result.affected_rows() == 1);
+
+    string newOrderDelete = fmt::format("DELETE from bench.new_order WHERE no_d_id = {:d} AND no_w_id = {:d} AND no_o_id = {:d};", dparams.dId, dparams.wId, oId);
+    pqxx::result no_delete_result = transaction.exec0(newOrderDelete, "DeliveryTXNNewOrderDelete");
+    assert(no_delete_result.affected_rows() == 1);
+
+    assert(total > 0);
+
+    if (state.counters.count("deliveries") == 0)
+        state.counters["deliveries"] = benchmark::Counter(1);
+    else {
+        state.counters["deliveries"].value++;
+    }
+    return true;
+}
+
+bool doDeliveryN(benchmark::State &state, ScaleParameters& params, pqxx::transaction<>& transaction, int n=DISTRICTS_PER_WAREHOUSE) {
+    DeliveryParams dparams;
+    randomHelper.generateDeliveryParams(params, dparams);
+    for(int dId = 1; dId <= n; ++dId) {
+        dparams.dId = dId;
+        bool result = doDelivery(state, params, dparams, transaction);
+        if(!result)
+            return false;
+    }
+
+    return true;
+}
+
+bool doOrderStatus(benchmark::State &state, ScaleParameters& params, pqxx::transaction<>& transaction) {
+    OrderStatusParams osparams;
+    randomHelper.generateOrderStatusParams(params, osparams);
+
+    pqxx::row customer;
+    if(osparams.cId != INT32_MIN) {
+        string custById = fmt::format(
+            "SELECT c_id,c_first,c_middle,c_last,c_balance from bench.customer "
+            "WHERE c_id = {:d} AND c_w_id = {:d} AND c_d_id = {:d};",
+            osparams.cId, osparams.wId, osparams.dId);
+
+        customer = transaction.exec1(custById, "OrderStatusTXNCustById");
+    } else {
+        string custByLastName = fmt::format(
+            "SELECT c_id,c_first,c_middle,c_last,c_balance from bench.customer "
+            "WHERE c_last = '{:s}' AND c_w_id = {:d} AND c_d_id = {:d};",
+            osparams.cLast, osparams.wId, osparams.dId);
+
+        pqxx::result customers = transaction.exec(custByLastName, "OrderStatusTXNCustByLastName");
+        assert(customers.size() > 0);
+        int index = (customers.size() - 1) / 2;
+        customer = customers[index];
+    }
+    int cId = customer.at("c_id").as<int>();
+
+    string orderQuery = fmt::format(
+        "SELECT o_id,o_carrier_id,o_entry_d from bench.\"order\" "
+        "WHERE o_c_id = {:d} AND o_w_id = {:d} AND o_d_id = {:d} ORDER BY o_id DESC LIMIT 1;",
+        cId, osparams.wId, osparams.dId);
+
+    pqxx::row order = transaction.exec1(orderQuery, "OrderStatusTXNOrders");
+    assert(!order.empty());
+
+    int oId = order.at("o_id").as<int>();
+
+    string orderLinesQuery = fmt::format("SELECT ol_supply,ol_i_id,ol_quantity,ol_amount,ol_delivery_d from bench.order_line WHERE ol_d_id = {:d} AND ol_w_id = {:d} AND ol_o_id = {:d};", osparams.dId, osparams.wId, oId);
+
+    pqxx::result ol_result = transaction.exec(orderLinesQuery, "OrderStatusTXNOrderLines");
+    assert(ol_result.size() > 0);
+    // TODO actually return result... customer, order, orderlines
+
+    if (state.counters.count("orderstatuses") == 0)
+        state.counters["orderstatuses"] = benchmark::Counter(1);
+    else {
+        state.counters["orderstatuses"].value++;
+    }
+
+    return true;
+}
+
+bool doPayment(benchmark::State &state, ScaleParameters& params, pqxx::transaction<>& transaction) {
+    PaymentParams pparams;
+    randomHelper.generatePaymentParams(params, pparams);
+
+    string updateDistrict = fmt::format("UPDATE bench.district SET d_ytd = d_ytd + {:f} WHERE d_id = {:d} AND d_w_id = {:d} RETURNING d_name,d_street_1,d_street_2,d_city,d_state,d_zip;", pparams.hAmount, pparams.dId, pparams.wId);
+
+    pqxx::row district = transaction.exec1(updateDistrict,  "PaymentTXNUpdateDistrict"); 
+    assert(!district.empty());
+
+    string updateWarehouse = fmt::format("UPDATE bench.warehouse SET w_ytd = w_ytd + {:f} WHERE w_id = {:d} RETURNING w_name,w_street_1,w_street_2,w_city,w_state,w_zip;", pparams.hAmount, pparams.wId);
+
+    pqxx::row warehouse = transaction.exec1(updateWarehouse,  "PaymentTXNUpdateWarehouse"); 
+    assert(!warehouse.empty());
+
+    pqxx::row customer;
+    if(pparams.cId != INT32_MIN) {
+        string custById = fmt::format(
+            "SELECT c_id,c_w_id,c_d_id,c_delivery_cnt,c_first,c_middle,c_last,c_street_1,c_street_2,c_city,c_state,c_zip,c_phone,c_credit,c_credit_lim,c_discount,c_data,c_since from bench.customer "
+            "WHERE c_id = {:d} AND c_w_id = {:d} AND c_d_id = {:d};",
+            pparams.cId, pparams.cWId, pparams.cDId);
+
+        customer = transaction.exec1(custById, "PaymentTXNCustById");
+    } else {
+        string custByLastName = fmt::format(
+            "SELECT c_id,c_w_id,c_d_id,c_delivery_cnt,c_first,c_middle,c_last,c_street_1,c_street_2,c_city,c_state,c_zip,c_phone,c_credit,c_credit_lim,c_discount,c_data,c_since from bench.customer "
+            "WHERE c_last = '{:s}' AND c_w_id = {:d} AND c_d_id = {:d};",
+            pparams.cLast, pparams.cWId, pparams.cDId);
+
+        pqxx::result customers = transaction.exec(custByLastName, "PaymentTXNCustByLastName");
+        assert(customers.size() > 0);
+        int index = (customers.size() - 1) / 2;
+        customer = customers[index];
+    }
+    int cId = customer.at("c_id").as<int>();
+    string cData = customer.at("c_data").as<string>();
+    string cCredit = customer.at("c_credit").as<string>();
+
+    string cDataChanged = "";
+    if(cCredit == BAD_CREDIT) {
+        string newData = fmt::format("{:d} {:d} {:d} {:d} {:d} {:f}", pparams.cId, pparams.cDId, pparams.cWId, pparams.dId, pparams.wId, pparams.hAmount);
+        cData = newData + "|" + cData;
+        if(cData.length() > MAX_C_DATA) {
+            cData.resize(MAX_C_DATA);
+        }
+        cDataChanged = fmt::format(" c_data = '{:s}',", cData);
+    }
+
+    string updateCustomer = fmt::format("UPDATE bench.customer SET{:s} c_balance = c_balance - {:f}, c_ytd_payment = c_ytd_payment + {:f}, c_payment_cnt = c_payment_cnt + 1 WHERE c_id = {:d} AND c_w_id = {:d} AND c_d_id = {:d}", cDataChanged, pparams.hAmount, pparams.hAmount, cId, pparams.cWId, pparams.cDId);
+    pqxx::result c_update = transaction.exec0(updateCustomer, "PaymentTXNCustUpdate");
+    assert(c_update.affected_rows() == 1);
+
+    string h_data = fmt::format("{:s}    {:s}", warehouse["w_name"].as<string>(), district["d_name"].as<string>());
+
+    string insertQuery = fmt::format(
+               "INSERT INTO bench.history VALUES\r\n ({:d}, {:d}, {:d}, {:d}, "
+               "{:d}, {:f}, '{:s}', '{:%Y-%m-%d %H:%M:%S}'",
+            cId, pparams.cWId, pparams.wId, pparams.cDId, pparams.dId, pparams.hAmount, pparams.hDate);
+    pqxx::result insertResult = transaction.exec0(updateCustomer, "PaymentTXNHistory");
+    assert(insertResult.affected_rows() == 1);
+
+    if (state.counters.count("payments") == 0)
+        state.counters["payments"] = benchmark::Counter(1);
+    else {
+        state.counters["payments"].value++;
+    }
+    return true;
+}
+
+bool doStockLevel(benchmark::State &state, ScaleParameters& params, pqxx::transaction<>& transaction) {
+    StockLevelParams sparams;
+    randomHelper.generateStockLevelParams(params, sparams);
+
+    string distQuery = fmt::format(
+        "SELECT d_next_o_id from bench.district "
+        "WHERE d_id = {:d} AND d_w_id = {:d} LIMIT 1;",
+        sparams.dId, sparams.wId);
+
+    pqxx::row district = transaction.exec1(distQuery, "StockLevelTXNDistQuery");
+    assert(!district.empty());
+    int nextOid = district["d_next_o_id"].as<int>();
+
+    string stockQuery = fmt::format(
+        "SELECT COUNT(DISTINCT(s_i_id)) from bench.order_line, bench.stock "
+        "WHERE ol_w_id = {:d} AND ol_d_id = {:d} AND ol_o_id < {:d} AND ol_o_id >= {:d} AND s_w_id = {:d} AND s_i_id = ol_i_id AND s_quantity < {:d};",
+        sparams.wId, sparams.dId, nextOid, nextOid - 20, sparams.wId, sparams.threshold);
+    pqxx::result stock = transaction.exec(stockQuery, "StockLevelTXNStockQuery");
+    assert(stock.size() > 0);
+
+    if (state.counters.count("stocklevels") == 0)
+        state.counters["stocklevels"] = benchmark::Counter(1);
+    else {
+        state.counters["stocklevels"].value++;
+    }
+    return true;
+}
+
+bool doNewOrder(benchmark::State &state, ScaleParameters& params, pqxx::transaction<>& transaction) {
+    NewOrderParams noparams;
+    randomHelper.generateNewOrderParams(params, noparams);
+
+    string updateDistrict = fmt::format("UPDATE bench.district SET d_next_o_id = d_next_o_id + 1 WHERE d_id = {:d} AND d_w_id = {:d} RETURNING d_id,d_w_id,d_tax,d_next_o_id;", noparams.dId, noparams.wId);
+
+    pqxx::row district = transaction.exec1(updateDistrict,  "NewOrderTXNUpdateDistrict"); 
+    assert(!district.empty());
+
+    double dTax = district["d_tax"].as<double>();
+    int dNextOId = district["d_next_o_id"].as<int>();
+
+    // TODO sharding?
+    string itemQuery = fmt::format(
+        "SELECT i_id,i_price,i_name,i_data from bench.item "
+        "WHERE i_id IN ({});", fmt::join(noparams.iIds, ","));
+    pqxx::result items = transaction.exec(itemQuery, "StockLevelTXNItemQuery");
+    if(items.size() != noparams.iIds.size()) {
+    if (state.counters.count("neworderfail") == 0)
+        state.counters["neworderfail"] = benchmark::Counter(1);
+    else {
+        state.counters["neworderfail"].value++;
+    }
+        return false;
+    }
+    // Get id index
+    auto getiIdIndex = [&](int iid) {
+        int index = find(noparams.iIds.begin(), noparams.iIds.end(), iid) - noparams.iIds.begin();
+        assert(index >= 0);
+        return index;
+    };
+
+    // wId lookup
+    auto getwId = [&](int iid) {
+        int index = getiIdIndex(iid);
+        return noparams.iIWds[index];
+    };
+
+    // get Qty index
+    auto getQty = [&](int iid) {
+        int index = getiIdIndex(iid);
+        return noparams.iQtys[index];
+    };
+
+    auto getItem = [&](int iid) {
+        return *find_if(items.begin(), items.end(), [=](pqxx::result::reference row) {
+            return row["i_id"].as<int>() == iid;
+        });
+    };
+
+    string queryWarehouse = fmt::format("SELECT w_tax FROM bench.warehouse WHERE w_id = {:d};", noparams.wId);
+    pqxx::row warehouse = transaction.exec1(queryWarehouse,  "NewOrderTXNQueryWarehouse"); 
+    assert(!warehouse.empty());
+    double wTax = warehouse["w_tax"].as<double>();
+
+    string queryCustomer = fmt::format("SELECT c_discount,c_last,c_credit FROM bench.customer WHERE c_w_id = {:d} AND c_d_id = {:d} AND c_id = {:d};", noparams.wId, noparams.dId, noparams.cId);
+    pqxx::row customer = transaction.exec1(queryCustomer,  "NewOrderTXNQueryCustomer"); 
+    assert(!customer.empty());
+    double cDiscount = customer["c_discount"].as<double>();
+
+    int olCnt = noparams.iIds.size();
+    int oCarrierId = NULL_CARRIER_ID;
+
+    string insertQuery = fmt::format(
+        "INSERT INTO bench.new_order VALUES\r\n ({:d}, {:d}, {:d});",
+        noparams.wId, dNextOId, noparams.dId);
+    pqxx::result noInsert = transaction.exec0(insertQuery, "NewOrderTXNInsertNewOrder");
+    assert(noInsert.affected_rows() == 1);
+
+    // All from same warehouse...
+    bool allLocal = all_of(noparams.iIWds.begin(), noparams.iIWds.end(), [=](int i) {
+        return i == noparams.iIWds[0];
+        });
+
+    pqxx::result stock;
+    if(allLocal) {
+        string stockQuery = fmt::format(
+            "SELECT "
+            "s_i_id,s_w_id,s_quantity,s_data,s_ytd,s_order_cnt,s_remote_cnt,s_dist_{:02d} "
+            "from bench.stock "
+            "WHERE s_w_id = {:d} AND s_i_id IN ({}) ;",
+            noparams.dId, noparams.wId, fmt::join(noparams.iIds, ","));
+
+        stock =
+            transaction.exec(stockQuery, "StockLevelTXNStockLocal");
+        assert(stock.size() == olCnt);
+    } else {
+        string stockQuery =
+            fmt::format("SELECT "
+                        "s_i_id,s_w_id,s_quantity,s_data,s_ytd,s_order_cnt,s_"
+                        "remote_cnt,s_dist_{:02d} "
+                        "from bench.stock "
+                        "WHERE\r\n ",
+                        noparams.dId, noparams.wId);
+
+        for (int i = 0; i < noparams.iIds.size(); ++i) {
+            stockQuery +=
+                fmt::format("(s_w_id = {:d} AND s_i_id = {:d})",
+                            getwId(noparams.iIds[i]), noparams.iIds[i]);
+            if (i + 1 < noparams.iIds.size()) {
+                stockQuery += " OR ";
+            } else {
+                stockQuery += ");";
+            }
+        }
+
+        stock = transaction.exec(stockQuery, "StockLevelTXNStockRemote");
+        assert(stock.size() == olCnt);
+    }
+
+    auto getStock = [&](int iid) {
+        return *find_if(stock.begin(), stock.end(), [=](pqxx::result::reference row) {
+            return row["s_i_id"].as<int>() == iid;
+        });
+    };
+
+    vector<tuple<string, int, string, double, double>> itemData;
+    itemData.reserve(olCnt);
+    double total = 0;
+    for(int i = 0; i < olCnt; ++i) {
+        int olNumber = i+1;
+        int olIId = noparams.iIds[i];
+        int iIdIdx = getiIdIndex(olIId);
+        int olSupplyWId = noparams.iIWds[i];
+        int olQuantity = noparams.iQtys[i];
+
+        auto item = getItem(olIId);
+        auto stockitem = getStock(olIId);
+
+        int sQuantity = stockitem["s_ytd"].as<int>();
+        int sYtd = stockitem["s_ytd"].as<int>() + olQuantity;
+
+        if(sQuantity >= olQuantity + 10) {
+            sQuantity = sQuantity - olQuantity;
+        } else {
+            sQuantity = sQuantity + 91 - olQuantity;
+        }
+
+        int sOrderCnt = stockitem["s_order_cnt"].as<int>() + 1;
+        int sRemoteCnt = stockitem["s_remote_cnt"].as<int>();
+
+        if(olSupplyWId != noparams.wId) {
+            sRemoteCnt++;
+        }
+
+        string updateStock = fmt::format(
+            "UPDATE bench.stock SET s_quantity = {:d}, s_ytd = {:d}, "
+            "s_order_cnt = {:d}, s_remote_cnt = {:d} WHERE s_i_id = {:d} AND "
+            "s_w_id = {:d}",
+            sQuantity, sYtd, sOrderCnt, sRemoteCnt, olIId, olSupplyWId);
+        pqxx::result updateStockResult =
+            transaction.exec0(updateStock, "StockLevelTXNStockUpdate");
+        assert(updateStockResult.affected_rows() == 1);
+
+        double olAmount = olQuantity*item["i_price"].as<double>();
+        total += olAmount;
+
+        string insertOrderLine = fmt::format(
+            "INSERT INTO bench.order_line VALUES\r\n "
+            "({:d},{:d},{:d},{:d},{:d},{:d},{:f},'{:s}');",
+            dNextOId, noparams.wId, noparams.dId, olIId, olSupplyWId,olQuantity,olAmount,stockitem.back().as<string>()
+        );
+        pqxx::result iOlResult =
+            transaction.exec0(insertOrderLine, "StockLevelTXNInsertOrderLine");
+        assert(iOlResult.affected_rows() == 1);
+
+        string iData = item["i_data"].as<string>();
+        string sData = stockitem["s_data"].as<string>();
+        string brandGeneric = "G";
+        if(iData.find(ORIGINAL_STRING) != -1 && sData.find(ORIGINAL_STRING) != -1) {
+            brandGeneric = "B";
+        }
+        itemData.push_back(make_tuple(item["i_name"].as<string>(),sQuantity, brandGeneric, item["i_price"].as<double>(), olAmount));
+    }
+    total *= (1 - cDiscount) * (1 + wTax + dTax);
+
+    string insertOrder =
+        fmt::format("INSERT INTO bench.order VALUES\r\n "
+                    "({:d},{:d},{:d},{:d},{:d},{:d},{:d},'{:%Y-%m-%d %H:%M:%S}');",
+                    dNextOId, noparams.wId, noparams.dId, noparams.cId, oCarrierId, olCnt,
+                    allLocal, noparams.oEntryDate);
+    pqxx::result iOResult =
+        transaction.exec0(insertOrder, "StockLevelTXNInsertOrder");
+    assert(iOResult.affected_rows() == 1);
+
+    if (state.counters.count("neworder") == 0)
+        state.counters["neworder"] = benchmark::Counter(1);
+    else {
+        state.counters["neworder"].value++;
+    }
+    return true;
+}
+
+ScaleParameters params = ScaleParameters::makeDefault(4);
 static void BM_PQXX_TPCC_OLD(benchmark::State &state) {
     auto conn = PostgreSQLDBHandler::GetConnection();
-    ScaleParameters params = ScaleParameters::makeDefault(4);
-    LoadBenchmark(conn, params, 4);
-    const std::string query = "select 500";
+    if(state.thread_index() == 0) {
+        try{
+            LoadBenchmark(conn, params, thread::hardware_concurrency());
+        } catch(...) {
+            cerr << "Error loading benchmark" << endl;
+        }
+    }
     for (auto _ : state) {
-        pqxx::nontransaction N(*conn);
-        pqxx::result R(N.exec(query));
+		auto start = std::chrono::high_resolution_clock::now();
+		auto end = std::chrono::high_resolution_clock::now();
+		auto elapsed_seconds =
+			std::chrono::duration_cast<std::chrono::duration<double>>(
+					end - start);
+        while (true) {
+            tpcc::TransactionType type = randomHelper.nextTransactionType();
+            // Start transaction
+            pqxx::transaction<> transaction(*conn);
+
+            bool result = false;
+            switch(type) {
+                case tpcc::TransactionType::Delivery:
+                    result = doDeliveryN(state, params, transaction);
+                    break;
+                case tpcc::TransactionType::OrderStatus:
+                    result = doDeliveryN(state, params, transaction);
+                    break;
+                case tpcc::TransactionType::Payment:
+                    result = doPayment(state, params, transaction);
+                    break;
+                case tpcc::TransactionType::StockLevel:
+                    result = doStockLevel(state, params, transaction);
+                    break;
+                case tpcc::TransactionType::NewOrder:
+                    result = doNewOrder(state, params, transaction);
+                    break;
+            }
+            //pqxx::result R(N.exec(query));
+            // Commit transaction
+            if(!result) {
+                transaction.abort();
+                continue;
+            }
+
+            transaction.commit();
+            break;
+        }
+        //state.SetIterationTime(elapsed_seconds.count());
     }
 }
 
-BENCHMARK(BM_PQXX_TPCC_OLD);
+BENCHMARK(BM_PQXX_TPCC_OLD)->MinTime(2000)->ThreadRange(1,8);//->UseManualTime();
