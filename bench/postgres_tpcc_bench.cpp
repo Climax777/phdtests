@@ -22,53 +22,6 @@ using namespace tpcc;
 //#define PRINT_TRACE
 using namespace std;
 
-static void CustomArgumentsInserts(benchmark::internal::Benchmark *b) {
-    for (int i = 1; i <= (1 << 12); i *= 8) { // Documents
-        for (int j = 1; j <= 16; j *= 2) {    // Fields
-            for (int k = 0; k <= j;) {        // Indexes
-                b->Args({i, j, k});
-                if (k == 0) {
-                    k = 1;
-                } else {
-                    k *= 2;
-                }
-            }
-        }
-    }
-}
-/*static void BM_PQXX_Select(benchmark::State& state) {
-        auto conn = PostgreSQLDBHandler::GetConnection();
-          const std::string query = "select 500";
-          for(auto _ : state) {
-                  pqxx::nontransaction N(*conn);
-                  pqxx::result R(N.exec(query));
-          }
-}
-
-BENCHMARK(BM_PQXX_Select);
-
-static void BM_PQXX_SelectTransact(benchmark::State& state) {
-        auto conn = PostgreSQLDBHandler::GetConnection();
-          const std::string query = "select 500";
-          for(auto _ : state) {
-                  pqxx::work w(*conn);
-                  // work::exec1() executes a query returning a single row of
-data.
-                  // We'll just ask the database to return the number 1 to us.
-                  pqxx::row r = w.exec1("SELECT 500");
-                  // Commit your transaction.  If an exception occurred before
-this
-                  // point, execution will have left the block, and the
-transaction will
-                  // have been destroyed along the way.  In that case, the
-failed
-                  // transaction would implicitly abort instead of getting to
-this point. w.commit();
-          }
-}
-
-BENCHMARK(BM_PQXX_SelectTransact);*/
-
 static void LoadBenchmark(std::shared_ptr<pqxx::connection> conn,
                           ScaleParameters &params, int warehouses, int clients) {
     static volatile bool created = false;
@@ -223,19 +176,10 @@ CREATE TABLE "stock" (
   PRIMARY KEY ("s_w_id", "s_i_id")
 );
 )|";
-    // TODO indexing
     {
         pqxx::nontransaction N(*conn);
         pqxx::result R(N.exec(createQuery));
     }
-    // if (state.range(2) > 0) {
-    //     for (int index = 0; index < state.range(2); ++index) {
-    //         pqxx::nontransaction N(*conn);
-    //         pqxx::result R(N.exec("CREATE INDEX field" + to_string(index) +
-    //                               " ON bench.create_bench\r\n(a" +
-    //                               to_string(index) + ");"));
-    //     }
-    // }
     // Use clients to scale loading too
     vector<vector<int>> w_ids;
     w_ids.resize(omp_get_num_procs());
@@ -331,7 +275,7 @@ CREATE TABLE "stock" (
 #ifdef PRINT_BENCH_GEN
             cout << warehouse;
 #endif
-            // TODO insert into DB
+            // insert into DB
             string insertQuery = fmt::format(
                 "INSERT INTO bench.warehouse VALUES\r\n({:d}, '{:s}', '{:s}', "
                 "'{:s}', '{:s}', '{:s}', '{:s}', {:f}, {:f});",
@@ -377,7 +321,6 @@ CREATE TABLE "stock" (
                     cout << cust;
 #endif
                     customers.push_back(cust);
-                    // TODO insert into DB
 
                     History hist;
                     randomHelper.generateHistory(wId, dId, cId, hist);
@@ -385,7 +328,6 @@ CREATE TABLE "stock" (
                     cout << hist;
 #endif
                     histories.push_back(hist);
-                    // TODO insert into DB
 
                     cIdPermuation.push_back(cId);
                 } // Customer
@@ -414,7 +356,6 @@ CREATE TABLE "stock" (
 #ifdef PRINT_BENCH_GEN
                     cout << order;
 #endif
-                    // TODO insert into DB
 
                     for (int olNumber = 0; olNumber < oOlCnt; ++olNumber) {
                         OrderLine line;
@@ -425,7 +366,6 @@ CREATE TABLE "stock" (
 #ifdef PRINT_BENCH_GEN
                         cout << line;
 #endif
-                        // TODO insert into DB
                     }
 
                     if (newOrder) {
@@ -438,7 +378,6 @@ CREATE TABLE "stock" (
                              << newOrder.wId << " " << newOrder.dId << endl;
 #endif
                         newOrders.push_back(newOrder);
-                        // TODO insert into neworder DB
                     }
                 } // Order
                 // Save district
@@ -584,7 +523,6 @@ CREATE TABLE "stock" (
                          << endl;
                     cerr << insertQuery << endl;
                 }
-                // TODO save history
                 insertQuery = "INSERT INTO bench.history VALUES\r\n";
                 for (int i = 0; i < histories.size(); ++i) {
                     insertQuery +=
@@ -717,7 +655,6 @@ ALTER TABLE "order_line" ADD FOREIGN KEY ("ol_supply_w_id", "ol_i_id") REFERENCE
 
 ALTER TABLE "new_order" ADD FOREIGN KEY ("no_w_id", "no_d_id", "no_o_id") REFERENCES "order" ("o_w_id", "o_d_id", "o_id");
 )|";
-    // TODO indexing
     {
         pqxx::nontransaction N(*conn);
         pqxx::result R(N.exec(alterQuery));
@@ -729,7 +666,7 @@ ALTER TABLE "new_order" ADD FOREIGN KEY ("no_w_id", "no_d_id", "no_o_id") REFERE
          << endl;
 }
 
-bool doDelivery(benchmark::State &state, ScaleParameters &params,
+static bool doDelivery(benchmark::State &state, ScaleParameters &params,
                 DeliveryParams &dparams, pqxx::transaction<> &transaction) {
 #ifdef PRINT_TRACE
     cout << "DoDelivery" << endl;
@@ -835,7 +772,7 @@ bool doDelivery(benchmark::State &state, ScaleParameters &params,
     return true;
 }
 
-bool doDeliveryN(benchmark::State &state, ScaleParameters &params,
+static bool doDeliveryN(benchmark::State &state, ScaleParameters &params,
                  shared_ptr<pqxx::connection> conn,
                  int n = DISTRICTS_PER_WAREHOUSE) {
 #ifdef PRINT_TRACE
@@ -854,7 +791,7 @@ bool doDeliveryN(benchmark::State &state, ScaleParameters &params,
     return true;
 }
 
-bool doOrderStatus(benchmark::State &state, ScaleParameters &params,
+static bool doOrderStatus(benchmark::State &state, ScaleParameters &params,
                    shared_ptr<pqxx::connection> conn) {
 #ifdef PRINT_TRACE
     cout << "OrderStatus" << endl;
@@ -923,7 +860,7 @@ bool doOrderStatus(benchmark::State &state, ScaleParameters &params,
     return true;
 }
 
-bool doPayment(benchmark::State &state, ScaleParameters &params,
+static bool doPayment(benchmark::State &state, ScaleParameters &params,
                shared_ptr<pqxx::connection> conn) {
 #ifdef PRINT_TRACE
     cout << "Payment" << endl;
@@ -1037,7 +974,7 @@ bool doPayment(benchmark::State &state, ScaleParameters &params,
     return true;
 }
 
-bool doStockLevel(benchmark::State &state, ScaleParameters &params,
+static bool doStockLevel(benchmark::State &state, ScaleParameters &params,
                   shared_ptr<pqxx::connection> conn) {
 #ifdef PRINT_TRACE
     cout << "stockLevel" << endl;
@@ -1075,7 +1012,7 @@ bool doStockLevel(benchmark::State &state, ScaleParameters &params,
     return true;
 }
 
-bool doNewOrder(benchmark::State &state, ScaleParameters &params,
+static bool doNewOrder(benchmark::State &state, ScaleParameters &params,
                 shared_ptr<pqxx::connection> conn, int &numFails) {
 #ifdef PRINT_TRACE
     cout << "newOrder" << endl;
@@ -1083,7 +1020,6 @@ bool doNewOrder(benchmark::State &state, ScaleParameters &params,
     NewOrderParams noparams;
     randomHelper.generateNewOrderParams(params, noparams);
 
-retry:
     pqxx::transaction<> transaction(*conn);
     string updateDistrict = fmt::format(
         "UPDATE bench.district SET d_next_o_id = d_next_o_id + 1 WHERE d_id = "
@@ -1112,10 +1048,7 @@ retry:
     if (items.size() != noparams.iIds.size()) {
         numFails++;
         transaction.abort();
-        // this_thread::sleep_for(100ms);
-        // TODO sleep?
         return false;
-        // goto retry;
     }
     // Get id index
     auto getiIdIndex = [&](int iid) {
@@ -1317,7 +1250,7 @@ retry:
     return true;
 }
 
-ScaleParameters params = ScaleParameters::makeDefault(4);
+static ScaleParameters params = ScaleParameters::makeDefault(4);
 static void BM_PQXX_TPCC_OLD(benchmark::State &state) {
     auto conn = PostgreSQLDBHandler::GetConnection();
     if (state.thread_index() == 0) {
@@ -1327,6 +1260,7 @@ static void BM_PQXX_TPCC_OLD(benchmark::State &state) {
             LoadBenchmark(conn, params, warehouses, state.threads());
         } catch (...) {
             cerr << "Error loading benchmark" << endl;
+            throw;
         }
     }
     int numDeliveries = 0;

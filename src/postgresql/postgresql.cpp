@@ -32,9 +32,16 @@ bool PostgreSQLDBHandler::DropDatabase(std::shared_ptr<pqxx::connection> conn, s
 bool PostgreSQLDBHandler::DropTable(std::shared_ptr<pqxx::connection> conn, std::string dbname, std::string tablename) {
 	pqxx::nontransaction N(*conn);
 	// Using schemas as databases
-	N.exec0("set search_path to " + N.esc(dbname) + ", \"$user\", public");
-	N.exec0("drop table if exists " + N.esc(tablename) + " cascade");
-	pqxx::row r = N.exec1("select exists ( select 1 from pg_tables where schemaname=" + N.quote(dbname) + " and tablename=" + N.quote(tablename) + ")");
+    N.exec0("set search_path to " + N.esc(dbname) + ", \"$user\", public");
+    try {
+        N.exec0("drop table if exists " + N.esc(tablename) + " cascade");
+    } catch (...) {
+    }
+    try {
+        N.exec0("drop type if exists " + N.esc(tablename) + " cascade");
+    } catch (...) {
+    }
+    pqxx::row r = N.exec1("select exists ( select 1 from pg_tables where schemaname=" + N.quote(dbname) + " and tablename=" + N.quote(tablename) + ")");
 	return r[0].as<bool>() == false;
 }
 

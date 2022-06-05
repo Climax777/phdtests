@@ -273,25 +273,6 @@ struct Customer {
     }
 };
 
-struct Order {
-    int oId;
-    int oWId;
-    int oDId;
-    int oCId;
-    int oOlCnt;
-    std::chrono::time_point<std::chrono::system_clock> oEntryD;
-    int oCarrierId;
-    bool oAllLocal;
-
-    friend auto operator<<(std::ostream &os, Order const &m)
-        -> std::ostream & {
-        return os << "Order: " << m.oId << " " << m.oWId << " " << m.oDId 
-        << " " << m.oCId << " " << m.oOlCnt << " " << m.oEntryD.time_since_epoch().count()
-        << " " << m.oCarrierId << " " << m.oAllLocal
-        << "\r\n";
-    }
-};
-
 struct OrderLine {
     int olOId;
     int olNumber;
@@ -303,13 +284,34 @@ struct OrderLine {
     int olQuantity;
     double olAmount;
     std::string olDistInfo;
-
     friend auto operator<<(std::ostream &os, OrderLine const &m)
         -> std::ostream & {
         return os << "OrderLine: " << m.olIId << " " << m.olNumber << " " << m.olWId << " " << m.olDId
         << " " << m.olIId << " " << m.olSupplyWId << " " << m.olDeliveryD.time_since_epoch().count()
         << " " << m.olQuantity << " " << m.olAmount << " " <<  m.olDistInfo
         << "\r\n";
+    }
+};
+
+struct Order {
+    int oId;
+    int oWId;
+    int oDId;
+    int oCId;
+    int oOlCnt;
+    std::chrono::time_point<std::chrono::system_clock> oEntryD;
+    int oCarrierId;
+    bool oAllLocal;
+    std::vector<OrderLine> oLines; // Only in denormalized model
+
+    friend auto operator<<(std::ostream &os, Order const &m)
+        -> std::ostream & {
+        os << "Order: " << m.oId << " " << m.oWId << " " << m.oDId 
+        << " " << m.oCId << " " << m.oOlCnt << " " << m.oEntryD.time_since_epoch().count()
+        << " " << m.oCarrierId << " " << m.oAllLocal << "\r\n";
+        for(auto line: m.oLines)
+            os << line;
+        return os;
     }
 };
 
@@ -423,7 +425,7 @@ private:
     NuRandC cValues;
 };
 
-RandomHelper randomHelper;
+static RandomHelper randomHelper;
 
 
 struct ScaleParameters {
