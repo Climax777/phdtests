@@ -135,7 +135,7 @@ vector<int> RandomHelper::uniqueIds(int num, int min, int max) {
 }
 TransactionType RandomHelper::nextTransactionType() {
     // TODO consider the shuffled deck generator
-    discrete_distribution<> dist({45, 43, 4, 4, 4});
+    static thread_local discrete_distribution<> dist({45, 43, 4, 4, 4});
     return (TransactionType)dist(gen);
 }
 
@@ -361,7 +361,7 @@ void RandomHelper::generateOrderLine(const ScaleParameters &params, int olwid,
     out.olQuantity = INITIAL_QUANTITY;
 
     bool remote = number(1, 100) == 1;
-    if (params.warehouses > 0 && remote) {
+    if (params.warehouses > 1 && remote) {
         out.olSupplyWId = numberExcluding(params.startingWarehouse,
                                           params.endingWarehouse, olwid);
     }

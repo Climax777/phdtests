@@ -447,6 +447,9 @@ struct ScaleParameters {
 
     static ScaleParameters makeDefault(int Warehouses);
     static ScaleParameters makeScaled(int Warehouses, double scaleFactor);
+    inline bool operator==(const ScaleParameters &rhs) {
+        return this->items == rhs.items && this->warehouses == rhs.warehouses && this->startingWarehouse == rhs.startingWarehouse && this->districtsPerWarehouse == rhs.districtsPerWarehouse && this->customersPerDistrict == rhs.customersPerDistrict && this->newOrdersPerDistrict == rhs.newOrdersPerDistrict && this->endingWarehouse == rhs.endingWarehouse;
+    }
 };
 
 } // namespace tpcc
