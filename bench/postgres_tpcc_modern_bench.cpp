@@ -210,7 +210,7 @@ CREATE TABLE "stock" (
 #ifdef PRINT_BENCH_GEN
         cout << w_id << endl;
 #endif
-        w_ids[w_id % clients].push_back(w_id);
+        w_ids[w_id % w_ids.size()].push_back(w_id);
     }
 
     int threadId;
