@@ -302,6 +302,7 @@ struct Order {
     std::chrono::time_point<std::chrono::system_clock> oEntryD;
     int oCarrierId;
     bool oAllLocal;
+    bool oNew;
     std::vector<OrderLine> oLines; // Only in denormalized model
 
     friend auto operator<<(std::ostream &os, Order const &m)

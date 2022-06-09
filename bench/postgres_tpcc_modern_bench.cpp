@@ -133,13 +133,6 @@ CREATE TABLE "history" (
   "h_date" timestamp NOT NULL
 );
 
-CREATE TABLE "new_order" (
-  "no_w_id" integer NOT NULL,
-  "no_o_id" integer NOT NULL,
-  "no_d_id" smallint NOT NULL,
-  PRIMARY KEY ("no_w_id", "no_d_id", "no_o_id")
-);
-
 CREATE TYPE order_line AS (
   "ol_number" smallint,
   "ol_i_id" integer,
@@ -159,7 +152,8 @@ CREATE TABLE "order" (
   "o_ol_cnt" numeric(2) NOT NULL,
   "o_all_local" numeric(1) NOT NULL,
   "o_entry_d" timestamp default 'now' NOT NULL,
-  "o_lines" order_line[],
+  "o_lines" order_line[] NOT NULL,
+  "o_new" boolean NOT NULL,
   PRIMARY KEY ("o_w_id", "o_d_id", "o_id")
 );
 
@@ -360,9 +354,7 @@ CREATE TABLE "stock" (
 
                 std::vector<Order> orders;
                 //std::vector<OrderLine> orderLines;
-                std::vector<NewOrder> newOrders;
                 orders.reserve(params.customersPerDistrict);
-                newOrders.reserve(params.newOrdersPerDistrict);
                 for (int oId = 1; oId <= params.customersPerDistrict; ++oId) {
                     int oOlCnt = randomHelper.number(MIN_OL_CNT, MAX_OL_CNT);
                     Order order;
@@ -386,19 +378,8 @@ CREATE TABLE "stock" (
                         cout << line;
 #endif
                     }
+                    order.oNew = newOrder;
                     orders.push_back(order);
-
-                    if (newOrder) {
-                        NewOrder newOrder;
-                        newOrder.wId = wId;
-                        newOrder.dId = dId;
-                        newOrder.oId = oId;
-#ifdef PRINT_BENCH_GEN
-                        cout << "NewOrder: " << newOrder.oId << " "
-                             << newOrder.wId << " " << newOrder.dId << endl;
-#endif
-                        newOrders.push_back(newOrder);
-                    }
                 } // Order
                 // Save district
                 string insertQuery = fmt::format(
@@ -496,9 +477,9 @@ CREATE TABLE "stock" (
                         }
                     }
                     if (i == orders.size() - 1) {
-                        insertQuery.append("]);");
+                        insertQuery.append(fmt::format("],{});",orders[i].oNew));
                     } else {
-                        insertQuery.append("]),\r\n");
+                        insertQuery.append(fmt::format("],{}),\r\n",orders[i].oNew));
                     }
                 }
                 try {
@@ -510,29 +491,7 @@ CREATE TABLE "stock" (
                     cerr << "Orders insert failed: " << e.base().what() << endl;
                     cerr << insertQuery << endl;
                 }
-                // save new order
-                insertQuery = "INSERT INTO bench.new_order VALUES\r\n";
-                for (int i = 0; i < newOrders.size(); ++i) {
-                    insertQuery +=
-                        fmt::format("({:d}, {:d}, {:d}", newOrders[i].wId,
-                                    newOrders[i].oId, newOrders[i].dId);
-                    if (i == newOrders.size() - 1) {
-                        insertQuery.append(");");
-                    } else {
-                        insertQuery.append("),\r\n");
-                    }
-                }
-                try {
-                    // cout << insertQuery << endl;
-                    // cout << "Writing thread " << omp_get_thread_num() << "
-                    // new order lines" << endl;
-                    pqxx::nontransaction N(*pgconn);
-                    pqxx::result R(N.exec(insertQuery));
-                } catch (pqxx::pqxx_exception &e) {
-                    cerr << "New orders insert failed: " << e.base().what()
-                         << endl;
-                    cerr << insertQuery << endl;
-                }
+
                 insertQuery = "INSERT INTO bench.history VALUES\r\n";
                 for (int i = 0; i < histories.size(); ++i) {
                     insertQuery +=
@@ -645,6 +604,7 @@ CREATE TABLE "stock" (
 CREATE UNIQUE INDEX "customer_i2" ON "customer" USING BTREE ("c_w_id", "c_d_id", "c_last", "c_first", "c_id");
 
 CREATE UNIQUE INDEX "orders_i2" ON "order" USING BTREE ("o_w_id", "o_d_id", "o_c_id", "o_id");
+CREATE INDEX "new_orders" ON "order" USING BTREE ("o_w_id", "o_d_id", "o_id") WHERE o_new = true;
 
 ALTER TABLE "district" ADD FOREIGN KEY ("d_w_id") REFERENCES "warehouse" ("w_id");
 
@@ -658,8 +618,6 @@ ALTER TABLE "order" ADD FOREIGN KEY ("o_w_id", "o_d_id", "o_c_id") REFERENCES "c
 
 ALTER TABLE "stock" ADD FOREIGN KEY ("s_i_id") REFERENCES "item" ("i_id");
 ALTER TABLE "stock" ADD FOREIGN KEY ("s_w_id") REFERENCES "warehouse" ("w_id");
-
-ALTER TABLE "new_order" ADD FOREIGN KEY ("no_w_id", "no_d_id", "no_o_id") REFERENCES "order" ("o_w_id", "o_d_id", "o_id");
 )|";
     {
         pqxx::nontransaction N(*conn);
@@ -678,8 +636,8 @@ static bool doDelivery(benchmark::State &state, ScaleParameters &params,
     cout << "DoDelivery" << endl;
 #endif
     string newOrderQuery =
-        fmt::format("SELECT * from bench.new_order WHERE no_d_id = {:d} AND "
-                    "no_w_id = {:d} ORDER BY no_o_id ASC LIMIT 1;",
+        fmt::format("SELECT o_id,o_lines,o_c_id from bench.order WHERE o_d_id = {:d} AND "
+                    "o_w_id = {:d} AND o_new = true ORDER BY o_id ASC LIMIT 1;",
                     dparams.dId, dparams.wId);
 #ifdef PRINT_TRACE
     cout << "noq" << endl;
@@ -697,18 +655,10 @@ static bool doDelivery(benchmark::State &state, ScaleParameters &params,
         return true;
     }
 
-    int oId = no_result.front().at("no_o_id").as<int>();
+    int oId = no_result.front().at("o_id").as<int>();
     assert(oId >= 1);
 
-    string orderQuery = fmt::format(
-        "SELECT o_c_id,o_id,o_d_id,o_w_id,o_lines from bench.\"order\" WHERE o_d_id = "
-        "{:d} AND o_w_id = {:d} AND o_id = {:d} LIMIT 1;",
-        dparams.dId, dparams.wId, oId);
-
-#ifdef PRINT_TRACE
-    cout << "oq" << endl;
-#endif
-    pqxx::row o_result = transaction.exec1(orderQuery, "DeliveryTXNOrder");
+    pqxx::row o_result = no_result.front();
     int cId = o_result.at("o_c_id").as<int>();
     // TODO upgrade to new driver (7.2) with to_composite support
     pqxx::array_parser ol_result = o_result["o_lines"].as_array();
@@ -725,7 +675,7 @@ static bool doDelivery(benchmark::State &state, ScaleParameters &params,
     } while (elem.first != pqxx::array_parser::juncture::done);
     // TODO improve!!
     string orderUpdate = fmt::format(
-        "UPDATE bench.\"order\" SET o_carrier_id = {:d},o_lines = ( SELECT "
+        "UPDATE bench.\"order\" SET o_new = false,o_carrier_id = {:d},o_lines = ( SELECT "
         "ARRAY_AGG(ROW("
         "ol.ol_number,"
         "ol.ol_i_id,"
@@ -769,17 +719,6 @@ static bool doDelivery(benchmark::State &state, ScaleParameters &params,
     pqxx::result cust_update_result =
         transaction.exec(custUpdate, "DeliveryTXNUpdateCust");
     assert(cust_update_result.affected_rows() == 1);
-
-    string newOrderDelete =
-        fmt::format("DELETE from bench.new_order WHERE no_d_id = {:d} AND "
-                    "no_w_id = {:d} AND no_o_id = {:d};",
-                    dparams.dId, dparams.wId, oId);
-#ifdef PRINT_TRACE
-    cout << "nod" << endl;
-#endif
-    pqxx::result no_delete_result =
-        transaction.exec0(newOrderDelete, "DeliveryTXNNewOrderDelete");
-    assert(no_delete_result.affected_rows() == 1);
 
     assert(total > 0);
 
@@ -1246,20 +1185,10 @@ static bool doNewOrder(benchmark::State &state, ScaleParameters &params,
                                       brandGeneric,
                                       item["i_price"].as<double>(), olAmount));
     }
-    insertOrder += "]);";
+    insertOrder += "],true);";
     pqxx::result iOResult =
         transaction.exec0(insertOrder, "StockLevelTXNInsertOrder");
     assert(iOResult.affected_rows() == 1);
-
-    string insertQuery = fmt::format(
-        "INSERT INTO bench.new_order VALUES\r\n ({:d}, {:d}, {:d});",
-        noparams.wId, dNextOId, noparams.dId);
-#ifdef PRINT_TRACE
-    cout << "noi" << endl;
-#endif
-    pqxx::result noInsert =
-        transaction.exec0(insertQuery, "NewOrderTXNInsertNewOrder");
-    assert(noInsert.affected_rows() == 1);
 
     total *= (1 - cDiscount) * (1 + wTax + dTax);
 
