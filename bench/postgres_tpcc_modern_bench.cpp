@@ -146,8 +146,7 @@ CREATE TYPE order_line AS (
   "ol_supply_w_id" integer,
   "ol_quantity" numeric(2),
   "ol_amount" numeric(6,2),
-  "ol_dist_info" varchar(24),
-  "ol_delivery_d" timestamp
+  "ol_dist_info" varchar(24)
 );
 
 CREATE TABLE "order" (
@@ -159,6 +158,7 @@ CREATE TABLE "order" (
   "o_ol_cnt" numeric(2) NOT NULL,
   "o_all_local" numeric(1) NOT NULL,
   "o_entry_d" timestamp default 'now' NOT NULL,
+  "o_delivery_d" timestamp,
   "o_lines" order_line[],
   PRIMARY KEY ("o_w_id", "o_d_id", "o_id")
 );
@@ -386,6 +386,9 @@ CREATE TABLE "stock" (
                         cout << line;
 #endif
                     }
+                    order.oDeliveryD =
+                        newOrder ? chrono::system_clock::time_point(0s)
+                                 : chrono::system_clock::now();
                     orders.push_back(order);
 
                     if (newOrder) {
@@ -460,35 +463,33 @@ CREATE TABLE "stock" (
                 for (int i = 0; i < orders.size(); ++i) {
                     insertQuery +=
                         fmt::format("({:d}, {:d}, {:d}, {:d}, {:s}, {:d}, "
-                                    "{:d}, '{:%Y-%m-%d %H:%M:%S}', ARRAY[\r\n",
+                                    "{:d}, '{:%Y-%m-%d %H:%M:%S}', ",
                                     orders[i].oId, orders[i].oWId,
                                     orders[i].oDId, orders[i].oCId,
                                     orders[i].oCarrierId == NULL_CARRIER_ID
                                         ? "null"
                                         : to_string(orders[i].oCarrierId),
                                     orders[i].oOlCnt, orders[i].oAllLocal,
-                                    orders[i].oEntryD);
+                                    orders[i].oEntryD
+                                    );
+                        if(orders[i].oDeliveryD.time_since_epoch().count() == 0) {
+                            insertQuery.append("null");
+                        } else {
+                            insertQuery.append(
+                                fmt::format("'{:%Y-%m-%d %H:%M:%S}'",
+                                            orders[i].oDeliveryD));
+                        }
+                        insertQuery.append(", ARRAY[\r\n");
                     for (int j = 0; j < orders[i].oLines.size(); ++j) {
                         insertQuery +=
                             fmt::format("\t({:d}, {:d}, {:d}, {:d}, {:f}, "
-                                        "'{:s}', ",
+                                        "'{:s}'",
                                         orders[i].oLines[j].olNumber,
                                         orders[i].oLines[j].olIId,
                                         orders[i].oLines[j].olSupplyWId,
                                         orders[i].oLines[j].olQuantity,
                                         orders[i].oLines[j].olAmount,
                                         orders[i].oLines[j].olDistInfo);
-                        if (orders[i]
-                                .oLines[j]
-                                .olDeliveryD.time_since_epoch()
-                                .count() == 0) {
-                            insertQuery.append("null");
-                        } else {
-                            insertQuery.append(
-                                fmt::format("'{:%Y-%m-%d %H:%M:%S}'",
-                                            orders[i].oLines[j].olDeliveryD));
-                        }
-
                         if (j == orders[i].oLines.size() - 1) {
                             insertQuery.append(")::bench.order_line");
                         } else {
@@ -725,18 +726,9 @@ static bool doDelivery(benchmark::State &state, ScaleParameters &params,
     } while (elem.first != pqxx::array_parser::juncture::done);
     // TODO improve!!
     string orderUpdate = fmt::format(
-        "UPDATE bench.\"order\" SET o_carrier_id = {:d},o_lines = ( SELECT "
-        "ARRAY_AGG(ROW("
-        "ol.ol_number,"
-        "ol.ol_i_id,"
-        "ol.ol_supply_w_id,"
-        "ol.ol_quantity,"
-        "ol.ol_amount,"
-        "ol.ol_dist_info,"
+        "UPDATE bench.\"order\" SET o_carrier_id = {:d},o_delivery_d = "
         "'{:%Y-%m-%d %H:%M:%S}'"
-        ")::bench.order_line)"
-        "FROM UNNEST(o_lines) ol"
-        ") WHERE "
+        " WHERE "
         "o_d_id = {:d} AND o_w_id = {:d} AND o_id = {:d};",
         dparams.oCarrierId, dparams.olDeliveryD, dparams.dId, dparams.wId, oId);
 #ifdef PRINT_TRACE
@@ -1176,7 +1168,7 @@ static bool doNewOrder(benchmark::State &state, ScaleParameters &params,
 
     string insertOrder = fmt::format(
         "INSERT INTO bench.order VALUES\r\n "
-        "({:d},{:d},{:d},{:d},{:d},{:d},{:d},'{:%Y-%m-%d %H:%M:%S}', ARRAY[",
+        "({:d},{:d},{:d},{:d},{:d},{:d},{:d},'{:%Y-%m-%d %H:%M:%S}', null, ARRAY[",
         dNextOId, noparams.wId, noparams.dId, noparams.cId, oCarrierId, olCnt,
         allLocal, noparams.oEntryDate);
 #ifdef PRINT_TRACE
@@ -1227,7 +1219,7 @@ static bool doNewOrder(benchmark::State &state, ScaleParameters &params,
         total += olAmount;
 
         insertOrder += fmt::format(
-            "\r\n({:d},{:d},{:d},{:d},{:f},'{:s}',null)::bench.order_line",
+            "\r\n({:d},{:d},{:d},{:d},{:f},'{:s}')::bench.order_line",
             olNumber, olIId, olSupplyWId,
             olQuantity, olAmount, stockitem.back().as<string>());
 
