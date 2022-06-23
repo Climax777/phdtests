@@ -15,9 +15,14 @@
 #include <mongocxx/uri.hpp>
 #include <bsoncxx/builder/basic/document.hpp>
 #include <bsoncxx/builder/basic/kvp.hpp>
+#include <bsoncxx/builder/list.hpp>
 #include <bsoncxx/document/value.hpp>
 #include <bsoncxx/document/view.hpp>
 #include <bsoncxx/document/view_or_value.hpp>
+
+#define MDVV(...)	bsoncxx::document::view { bsoncxx::builder::document  { __VA_ARGS__ }.view().get_document() }
+#define MDV(...)	bsoncxx::document::value { MDVV( __VA_ARGS__ ) }
+#define MDV2(...)	bsoncxx::document::value { __VA_ARGS__ }
 
 class MongoDBHandler
 {

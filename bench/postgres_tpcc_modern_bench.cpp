@@ -1078,7 +1078,7 @@ static bool doNewOrder(benchmark::State &state, ScaleParameters &params,
                         "remote_cnt,s_dist_{:02d} "
                         "from bench.stock "
                         "WHERE\r\n ",
-                        noparams.dId, noparams.wId);
+                        noparams.dId);
 
         for (int i = 0; i < noparams.iIds.size(); ++i) {
             stockQuery +=
