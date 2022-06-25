@@ -1,6 +1,7 @@
 #include "benchmark/benchmark.h"
 #include "dbphd/mongodb/mongodb.hpp"
 #include <mongocxx/exception/exception.hpp>
+#include <mongocxx/exception/operation_exception.hpp>
 #include <bsoncxx/builder/list.hpp>
 #include <bsoncxx/types.hpp>
 #include <bsoncxx/types/bson_value/value.hpp>
@@ -130,7 +131,7 @@ static void LoadBenchmark(mongocxx::pool::entry& conn,
                     }
                     try {
                         auto result = writer.execute();
-                        assert(result == true);
+                        assert(result.has_value() == true);
                         assert(result.value().inserted_count() == BATCH_SIZE);
                     } catch (mongocxx::exception &e) {
                         cerr << "Item insert failed: " << e.what() << endl;
@@ -156,7 +157,7 @@ static void LoadBenchmark(mongocxx::pool::entry& conn,
                 }
                 try {
                     auto result = writer.execute();
-                    assert(result == true);
+                    assert(result.has_value() == true);
                     assert(result.value().inserted_count() == items.size());
                 } catch (mongocxx::exception &e) {
                     cerr << "Item ext. insert failed: " << e.what() << endl;
@@ -184,7 +185,7 @@ static void LoadBenchmark(mongocxx::pool::entry& conn,
             };
             try {
                 auto result = warehouseC.insert_one(MDV(whInsert));
-                assert(result == true);
+                assert(result.has_value() == true);
                 assert(result.value().result().inserted_count() == 1);
             } catch (mongocxx::exception &e) {
                 cerr << "Warehouse insert failed: " << e.what() << endl;
@@ -295,7 +296,7 @@ static void LoadBenchmark(mongocxx::pool::entry& conn,
                 };
                 try {
                     auto result = districtC.insert_one(MDV(distInsert));
-                    assert(result == true);
+                    assert(result.has_value() == true);
                     assert(result.value().result().inserted_count() == 1);
                 } catch (mongocxx::exception &e) {
                     cerr << "District insert failed: " << e.what()
@@ -333,7 +334,7 @@ static void LoadBenchmark(mongocxx::pool::entry& conn,
                 }
                 try {
                     auto result = customerWriter.execute();
-                    assert(result == true);
+                    assert(result.has_value() == true);
                     assert(result.value().inserted_count() == customers.size());
                 } catch (mongocxx::exception &e) {
                     cerr << "Customer insert failed: " << e.what()
@@ -359,7 +360,7 @@ static void LoadBenchmark(mongocxx::pool::entry& conn,
                 }
                 try {
                     auto result = orderWriter.execute();
-                    assert(result == true);
+                    assert(result.has_value() == true);
                     assert(result.value().inserted_count() == orders.size());
                 } catch (mongocxx::exception &e) {
                     cerr << "Orders insert failed: " << e.what() << endl;
@@ -401,7 +402,7 @@ static void LoadBenchmark(mongocxx::pool::entry& conn,
                 }
                 try {
                     auto result = orderLineWriter.execute();
-                    assert(result == true);
+                    assert(result.has_value() == true);
                     assert(result.value().inserted_count() == orderLines.size());
                 } catch (mongocxx::exception &e) {
                     cerr << "Order lines insert failed: " << e.what()
@@ -420,7 +421,7 @@ static void LoadBenchmark(mongocxx::pool::entry& conn,
                 }
                 try {
                     auto result = newOrderWriter.execute();
-                    assert(result == true);
+                    assert(result.has_value() == true);
                     assert(result.value().inserted_count() == newOrders.size());
                 } catch (mongocxx::exception &e) {
                     cerr << "New orders insert failed: " << e.what()
@@ -445,7 +446,7 @@ static void LoadBenchmark(mongocxx::pool::entry& conn,
                 }
                 try {
                     auto result = historyWriter.execute();
-                    assert(result == true);
+                    assert(result.has_value() == true);
                     assert(result.value().inserted_count() == histories.size());
                 } catch (mongocxx::exception &e) {
                     cerr << "History insert failed: " << e.what()
@@ -495,7 +496,7 @@ static void LoadBenchmark(mongocxx::pool::entry& conn,
                     }
                     try {
                         auto result = writer.execute();
-                        assert(result == true);
+                        assert(result.has_value() == true);
                         assert(result.value().inserted_count() == stocks.size());
                     } catch (mongocxx::exception &e) {
                         cerr << "Stocks insert failed: " << e.what()
@@ -532,7 +533,7 @@ static void LoadBenchmark(mongocxx::pool::entry& conn,
                     }
                     try {
                         auto result = writer.execute();
-                        assert(result == true);
+                        assert(result.has_value() == true);
                         assert(result.value().inserted_count() == stocks.size());
                     } catch (mongocxx::exception &e) {
                         cerr << "Stocks insert cntd. failed: " << e.what()
@@ -617,7 +618,7 @@ static bool doDelivery(benchmark::State &state, ScaleParameters &params,
     options2.comment("DeliveryTXNOrder");
     auto colOrder = conn->database("bench").collection("order");
     auto o_result = colOrder.find_one(session, MDV("o_d_id", dparams.dId, "o_w_id", dparams.wId, "o_id", oId), options2);
-    assert(o_result == true);
+    assert(o_result.has_value() == true);
     int cId = (*o_result)["o_c_id"].get_int32();
 
 #ifdef PRINT_TRACE
@@ -641,7 +642,7 @@ static bool doDelivery(benchmark::State &state, ScaleParameters &params,
     cout << "ouq" << endl;
 #endif
     auto o_update_result = colOrder.update_one(session, MDV("o_d_id", dparams.dId, "o_w_id", dparams.wId, "o_id", oId), MDV("$set", MDV("o_carrier_id", dparams.oCarrierId)));
-    assert(o_update_result == true);
+    assert(o_update_result.has_value() == true);
     assert(o_update_result.value().modified_count() == 1);
 
 
@@ -649,7 +650,7 @@ static bool doDelivery(benchmark::State &state, ScaleParameters &params,
     cout << "oluq" << endl;
 #endif
     auto ol_update_result = colOrderLine.update_many(session, MDV("ol_d_id", dparams.dId, "ol_w_id", dparams.wId, "ol_o_id", oId), MDV("$set", MDV("ol_delivery_d", bsoncxx::types::b_date{dparams.olDeliveryD})));
-    assert(ol_update_result == true);
+    assert(ol_update_result.has_value() == true);
     assert(ol_update_result.value().modified_count() > 0);
 
 #ifdef PRINT_TRACE
@@ -657,14 +658,14 @@ static bool doDelivery(benchmark::State &state, ScaleParameters &params,
 #endif
     auto colCustomer = conn->database("bench").collection("customer");
     auto cust_update_result = colCustomer.update_one(session, MDV("c_d_id", dparams.dId, "c_w_id", dparams.wId, "c_id", cId), MDV("$set", MDV("c_balance", total)));
-    assert(cust_update_result == true);
+    assert(cust_update_result.has_value() == true);
     assert(cust_update_result.value().modified_count() == 1);
 
 #ifdef PRINT_TRACE
     cout << "nod" << endl;
 #endif
-    auto no_delete_result = colNewOrder.delete_one(MDV("no_d_id", dparams.dId, "no_w_id", dparams.wId, "no_o_id", oId));
-    assert(no_delete_result == true);
+    auto no_delete_result = colNewOrder.delete_one(session, MDV("no_d_id", dparams.dId, "no_w_id", dparams.wId, "no_o_id", oId));
+    assert(no_delete_result.has_value() == true);
     assert(no_delete_result.value().deleted_count() == 1);
 
     assert(total > 0);
@@ -673,508 +674,601 @@ static bool doDelivery(benchmark::State &state, ScaleParameters &params,
 }
 
 static bool doDeliveryN(benchmark::State &state, ScaleParameters &params,
-                 mongocxx::pool::entry& conn,
+                 mongocxx::pool::entry& conn, int &retries,
                  int n = DISTRICTS_PER_WAREHOUSE) {
 #ifdef PRINT_TRACE
     cout << "DoDeliveryN" << endl;
 #endif
     DeliveryParams dparams;
     randomHelper.generateDeliveryParams(params, dparams);
+
+    int tries = 0;
+    mongocxx::client_session::with_transaction_cb callback =
+        [&](mongocxx::client_session *session) {
+            tries++;
+            for (int dId = 1; dId <= n; ++dId) {
+                dparams.dId = dId;
+                bool result =
+                    doDelivery(state, params, dparams, conn, *session);
+                if (!result)
+                    return false;
+            }
+            return true;
+        };
     auto session = conn->start_session();
-    session.start_transaction();
-    for (int dId = 1; dId <= n; ++dId) {
-        dparams.dId = dId;
-        bool result = doDelivery(state, params, dparams, conn, session);
-        if (!result)
-            return false;
-    }
-    session.commit_transaction();
+    session.with_transaction(callback);
+    retries += tries - 1;
     return true;
 }
 
 static bool doOrderStatus(benchmark::State &state, ScaleParameters &params,
-                   mongocxx::pool::entry& conn) {
+                   mongocxx::pool::entry& conn, int &retries) {
 #ifdef PRINT_TRACE
     cout << "OrderStatus" << endl;
 #endif
     OrderStatusParams osparams;
     randomHelper.generateOrderStatusParams(params, osparams);
+    int tries = 0;
+    mongocxx::client_session::with_transaction_cb callback =
+        [&](mongocxx::client_session *session) {
+            tries++;
+            auto colCustomer = conn->database("bench").collection("customer");
+
+            std::optional<bsoncxx::document::value> customer;
+            if (osparams.cId != INT32_MIN) {
+#ifdef PRINT_TRACE
+                cout << "cqi" << endl;
+#endif
+                auto findOptions = mongocxx::options::find();
+                findOptions.comment("OrderStatusTXNCustById");
+                findOptions.projection(MDV("c_id", 1, "c_first", 1, "c_middle",
+                                           1, "c_last", 1, "c_balance", 1,
+                                           "_id", 0));
+                customer = colCustomer.find_one(*session,
+                                                MDV("c_id", osparams.cId,
+                                                    "c_w_id", osparams.wId,
+                                                    "c_d_id", osparams.dId),
+                                                findOptions);
+            } else {
+#ifdef PRINT_TRACE
+                cout << "cql" << endl;
+#endif
+                auto findOptions = mongocxx::options::find();
+                findOptions.comment("OrderStatusTXNCustByLastName");
+                findOptions.projection(MDV("c_id", 1, "c_first", 1, "c_middle",
+                                           1, "c_last", 1, "c_balance", 1,
+                                           "_id", 0));
+                findOptions.sort(MDV("c_first", 1));
+                auto customers =
+                    colCustomer.find(*session,
+                                     MDV("c_last", osparams.cLast, "c_w_id",
+                                         osparams.wId, "c_d_id", osparams.dId),
+                                     findOptions);
+                std::vector<bsoncxx::document::value> results;
+                for (auto &&cust : customers) {
+                    results.push_back(MDV2(cust));
+                }
+                assert(results.size() > 0);
+                int index = (results.size() - 1) / 2;
+                customer = results[index];
+            }
+            assert(customer.has_value() == true);
+            int cId = (*customer)["c_id"].get_int32();
+
+#ifdef PRINT_TRACE
+            cout << "oq" << endl;
+#endif
+            auto colOrder = conn->database("bench").collection("order");
+            auto findOptions = mongocxx::options::find();
+            findOptions.comment("OrderStatusTXNOrders");
+            findOptions.projection(
+                MDV("o_id", 1, "o_carrier_id", 1, "o_entry_d", 1, "_id", 0));
+            findOptions.sort(MDV("o_id", -1));
+            findOptions.limit(1);
+            auto theOrders =
+                colOrder.find(*session,
+                              MDV("o_c_id", cId, "o_w_id", osparams.wId,
+                                  "o_d_id", osparams.dId),
+                              findOptions);
+            std::vector<bsoncxx::document::value> allOrders;
+            for (auto &&ord : theOrders) {
+                allOrders.push_back(MDV2(ord));
+            }
+            assert(allOrders.size() == 1);
+            auto order = allOrders[0];
+
+            int oId = order["o_id"].get_int32();
+
+#ifdef PRINT_TRACE
+            cout << "olq" << endl;
+#endif
+            auto colOrderLines =
+                conn->database("bench").collection("order_line");
+            auto findOLOptions = mongocxx::options::find();
+            findOLOptions.comment("OrderStatusTXNOrderLines");
+            findOLOptions.projection(MDV("ol_supply_w_id", 1, "ol_i_id", 1,
+                                         "ol_quantity", 1, "ol_amount", 1,
+                                         "ol_delivery_d", 1, "_id", 0));
+            auto orderline =
+                colOrderLines.find(*session,
+                                   MDV("ol_d_id", osparams.dId, "ol_w_id",
+                                       osparams.wId, "ol_o_id", oId),
+                                   findOLOptions);
+            int olCount = 0;
+            for (auto &&ol : orderline) {
+                olCount++;
+            }
+            assert(olCount > 0);
+            // TODO actually return result... customer, order, orderlines
+        };
     auto session = conn->start_session();
-    session.start_transaction();
-    auto colCustomer = conn->database("bench").collection("customer");
-
-    std::optional<bsoncxx::document::value> customer;
-    if (osparams.cId != INT32_MIN) {
-#ifdef PRINT_TRACE
-        cout << "cqi" << endl;
-#endif
-        auto findOptions = mongocxx::options::find();
-        findOptions.comment("OrderStatusTXNCustById");
-        findOptions.projection(MDV("c_id", 1, "c_first", 1, "c_middle", 1, "c_last", 1, "c_balance", 1, "_id", 0));
-        customer = colCustomer.find_one(session, MDV("c_id", osparams.cId, "c_w_id", osparams.wId, "c_d_id", osparams.dId), findOptions);
-    } else {
-#ifdef PRINT_TRACE
-        cout << "cql" << endl;
-#endif
-        auto findOptions = mongocxx::options::find();
-        findOptions.comment("OrderStatusTXNCustByLastName");
-        findOptions.projection(MDV("c_id", 1, "c_first", 1, "c_middle", 1, "c_last", 1, "c_balance", 1, "_id", 0));
-        findOptions.sort(MDV("c_first", 1));
-        auto customers = colCustomer.find(session, MDV("c_last", osparams.cLast, "c_w_id", osparams.wId, "c_d_id", osparams.dId), findOptions);
-        std::vector<bsoncxx::document::value> results;
-        for(auto&& cust: customers) {
-            results.push_back(MDV2(cust));
-        }
-        assert(results.size() > 0);
-        int index = (results.size() - 1) / 2;
-        customer = results[index];
-    }
-    assert(customer == true);
-    int cId = (*customer)["c_id"].get_int32();
-
-#ifdef PRINT_TRACE
-    cout << "oq" << endl;
-#endif
-        auto colOrder = conn->database("bench").collection("order");
-        auto findOptions = mongocxx::options::find();
-        findOptions.comment("OrderStatusTXNOrders");
-        findOptions.projection(MDV("o_id", 1, "o_carrier_id", 1, "o_entry_d", 1, "_id", 0));
-        findOptions.sort(MDV("o_id", -1));
-        findOptions.limit(1);
-        auto theOrders = colOrder.find(session, MDV("o_c_id", cId, "o_w_id", osparams.wId, "o_d_id", osparams.dId), findOptions);
-        std::vector<bsoncxx::document::value> allOrders;
-        for(auto&& ord: theOrders) {
-            allOrders.push_back(MDV2(ord));
-        }
-        assert(allOrders.size() == 1);
-        auto order = allOrders[0];
-
-        int oId = order["o_id"].get_int32();
-
-#ifdef PRINT_TRACE
-    cout << "olq" << endl;
-#endif
-    auto colOrderLines = conn->database("bench").collection("order_line");
-    auto findOLOptions = mongocxx::options::find();
-    findOLOptions.comment("OrderStatusTXNOrderLines");
-    findOLOptions.projection(
-        MDV("ol_supply_w_id", 1, "ol_i_id", 1, "ol_quantity", 1, "ol_amount",
-             1, "ol_delivery_d", 1, "_id", 0));
-    auto orderline = colOrderLines.find(
-        session,
-        MDV("ol_d_id", osparams.dId, "ol_w_id", osparams.wId, "ol_o_id", oId),
-        findOLOptions);
-    int olCount = 0;
-    for (auto &&ol : orderline) {
-        olCount++;
-    }
-    assert(olCount > 0);
-    // TODO actually return result... customer, order, orderlines
-
-    session.commit_transaction();
+    session.with_transaction(callback);
+    retries += tries - 1;
     return true;
 }
 
 static bool doPayment(benchmark::State &state, ScaleParameters &params,
-               mongocxx::pool::entry& conn) {
+               mongocxx::pool::entry& conn, int &retries) {
 #ifdef PRINT_TRACE
     cout << "Payment" << endl;
 #endif
     PaymentParams pparams;
     randomHelper.generatePaymentParams(params, pparams);
+    int tries = 0;
+    mongocxx::client_session::with_transaction_cb callback =
+        [&](mongocxx::client_session *session) {
+            tries++;
+#ifdef PRINT_TRACE
+            cout << this_thread::get_id() << " distq" << endl;
+#endif
+            auto colDistrict = conn->database("bench").collection("district");
+            auto updateDistOptions = mongocxx::options::find_one_and_update();
+            updateDistOptions.projection(
+                MDV("d_name", 1, "d_street_1", 1, "d_street_2", 1, "d_city", 1,
+                    "d_state", 1, "d_zip", 1, "_id", 0));
+            auto district = colDistrict.find_one_and_update(
+                *session, MDV("d_id", pparams.dId, "d_w_id", pparams.wId),
+                MDV("$inc", MDV("d_ytd", pparams.hAmount)), updateDistOptions);
+            assert(district.has_value() == true);
+
+#ifdef PRINT_TRACE
+            cout << this_thread::get_id() << " whq" << endl;
+#endif
+            auto colWarehouse = conn->database("bench").collection("warehouse");
+            auto updateWarehouseOptions =
+                mongocxx::options::find_one_and_update();
+            updateWarehouseOptions.projection(
+                MDV("w_name", 1, "w_street_1", 1, "w_street_2", 1, "w_city", 1,
+                    "w_state", 1, "w_zip", 1, "_id", 0));
+            auto warehouse = colWarehouse.find_one_and_update(
+                *session, MDV("w_id", pparams.wId),
+                MDV("$inc", MDV("w_ytd", pparams.hAmount)),
+                updateWarehouseOptions);
+            assert(warehouse.has_value() == true);
+
+            auto colCustomer = conn->database("bench").collection("customer");
+            std::optional<bsoncxx::document::value> customer;
+            if (pparams.cId != INT32_MIN) {
+#ifdef PRINT_TRACE
+                cout << this_thread::get_id() << " cqi" << endl;
+#endif
+                auto customerOptions = mongocxx::options::find();
+                customerOptions.projection(MDV(
+                    "c_id", 1, "c_w_id", 1, "c_d_id", 1, "c_delivery_cnt", 1,
+                    "c_first", 1, "c_middle", 1, "c_last", 1, "c_street_1", 1,
+                    "c_street_2", 1, "c_city", 1, "c_state", 1, "c_zip", 1,
+                    "c_phone", 1, "c_credit", 1, "c_credit_lim", 1,
+                    "c_discount", 1, "c_data", 1, "c_since", 1, "_id", 0));
+                customer = colCustomer.find_one(*session,
+                                                MDV("c_id", pparams.cId,
+                                                    "c_w_id", pparams.cWId,
+                                                    "c_d_id", pparams.cDId),
+                                                customerOptions);
+            } else {
+#ifdef PRINT_TRACE
+                cout << this_thread::get_id() << " cql" << endl;
+#endif
+                auto customerOptions = mongocxx::options::find();
+                customerOptions.sort(MDV("c_first", 1));
+                customerOptions.projection(MDV(
+                    "c_id", 1, "c_w_id", 1, "c_d_id", 1, "c_delivery_cnt", 1,
+                    "c_first", 1, "c_middle", 1, "c_last", 1, "c_street_1", 1,
+                    "c_street_2", 1, "c_city", 1, "c_state", 1, "c_zip", 1,
+                    "c_phone", 1, "c_credit", 1, "c_credit_lim", 1,
+                    "c_discount", 1, "c_data", 1, "c_since", 1, "_id", 0));
+                auto customers =
+                    colCustomer.find(*session,
+                                     MDV("c_last", pparams.cLast, "c_w_id",
+                                         pparams.cWId, "c_d_id", pparams.cDId),
+                                     customerOptions);
+
+                std::vector<bsoncxx::document::value> results;
+                for (auto &&cust : customers) {
+                    results.push_back(MDV2(cust));
+                }
+                assert(results.size() > 0);
+                int index = (results.size() - 1) / 2;
+                customer = results[index];
+            }
+            assert(customer.has_value() == true);
+            int cId = (*customer)["c_id"].get_int32();
+            string cData((*customer)["c_data"].get_string());
+            string cCredit((*customer)["c_credit"].get_string());
+            if (cCredit == BAD_CREDIT) {
+                string newData = fmt::format(
+                    "{:d} {:d} {:d} {:d} {:d} {:f}", pparams.cId, pparams.cDId,
+                    pparams.cWId, pparams.dId, pparams.wId, pparams.hAmount);
+                cData = newData + "|" + cData;
+                if (cData.length() > MAX_C_DATA) {
+                    cData.resize(MAX_C_DATA);
+                }
+            }
+
+#ifdef PRINT_TRACE
+            cout << "cuq" << endl;
+#endif
+            auto colHistory = conn->database("bench").collection("history");
+            auto c_update = colCustomer.update_one(
+                *session,
+                MDV("c_id", cId, "c_w_id", pparams.cWId, "c_d_id", pparams.cDId),
+                MDV("$set", MDV("c_data", cData), "$inc",
+                    MDV("c_balance", -pparams.hAmount, "c_ytd_payment",
+                        pparams.hAmount, "c_payment_cnt", 1)));
+            assert(c_update.has_value() == true);
+            assert(c_update.value().modified_count() == 1);
+
+            string h_data =
+                fmt::format("{:s}    {:s}", (*warehouse)["w_name"].get_string(),
+                            (*district)["d_name"].get_string());
+
+#ifdef PRINT_TRACE
+            cout << "hi" << endl;
+#endif
+            auto insertResult = colHistory.insert_one(
+                *session,
+                MDV("h_c_id", cId, "h_c_w_id", pparams.cWId, "h_w_id",
+                    pparams.wId, "h_c_d_id", pparams.cDId, "h_d_id",
+                    pparams.dId, "h_amount", pparams.hAmount, "h_data", h_data,
+                    "h_date", bsoncxx::types::b_date{pparams.hDate}, ));
+            assert(insertResult.has_value() == true);
+            assert(insertResult.value().result().inserted_count() == 1);
+        };
     auto session = conn->start_session();
-    session.start_transaction();
-
-#ifdef PRINT_TRACE
-    cout << "distq" << endl;
-#endif
-    auto colDistrict = conn->database("bench").collection("district");
-    auto updateDistOptions = mongocxx::options::find_one_and_update();
-    updateDistOptions.projection(MDV("d_name", 1, "d_street_1", 1, "d_street_2", 1, "d_city", 1, "d_state", 1, "d_zip", 1, "_id", 0));
-    auto district = colDistrict.find_one_and_update(session, MDV("d_id", pparams.dId, "d_w_id", pparams.wId), MDV("$inc", MDV("d_ytd", pparams.hAmount)), updateDistOptions);
-    assert(district == true);
-
-#ifdef PRINT_TRACE
-    cout << "whq" << endl;
-#endif
-    auto colWarehouse = conn->database("bench").collection("warehouse");
-    auto updateWarehouseOptions = mongocxx::options::find_one_and_update();
-    updateWarehouseOptions.projection(MDV("w_name", 1, "w_street_1", 1, "w_street_2", 1, "w_city", 1, "w_state", 1, "w_zip", 1, "_id", 0));
-    auto warehouse = colWarehouse.find_one_and_update(session, MDV("w_id", pparams.wId), MDV("$inc", MDV("w_ytd", pparams.hAmount)), updateWarehouseOptions);
-    assert(warehouse == true);
-
-    auto colCustomer = conn->database("bench").collection("customer");
-    std::optional<bsoncxx::document::value> customer;
-    if (pparams.cId != INT32_MIN) {
-#ifdef PRINT_TRACE
-        cout << "cqi" << endl;
-#endif
-        auto customerOptions = mongocxx::options::find();
-        customerOptions.projection(MDV("c_id", 1, "c_w_id", 1, "c_d_id", 1, "c_delivery_cnt", 1, "c_first", 1, "c_middle", 1, "c_last", 1, "c_street_1", 1, "c_street_2", 1, "c_city", 1, "c_state", 1, "c_zip", 1, "c_phone", 1, "c_credit", 1, "c_credit_lim", 1, "c_discount", 1, "c_data", 1, "c_since", 1, "_id", 0));
-        customer = colCustomer.find_one(session, MDV("c_id", pparams.cId, "c_w_id", pparams.cWId, "c_d_id", pparams.cDId), customerOptions);
-    } else {
-#ifdef PRINT_TRACE
-        cout << "cql" << endl;
-#endif
-        auto customerOptions = mongocxx::options::find();
-        customerOptions.sort(MDV("c_first", 1));
-        customerOptions.projection(MDV("c_id", 1, "c_w_id", 1, "c_d_id", 1, "c_delivery_cnt", 1, "c_first", 1, "c_middle", 1, "c_last", 1, "c_street_1", 1, "c_street_2", 1, "c_city", 1, "c_state", 1, "c_zip", 1, "c_phone", 1, "c_credit", 1, "c_credit_lim", 1, "c_discount", 1, "c_data", 1, "c_since", 1, "_id", 0));
-        auto customers = colCustomer.find(session, MDV("c_last", pparams.cLast, "c_w_id", pparams.cWId, "c_d_id", pparams.cDId), customerOptions);
-
-        std::vector<bsoncxx::document::value> results;
-        for(auto&& cust: customers) {
-            results.push_back(MDV2(cust));
-        }
-        assert(results.size() > 0);
-        int index = (results.size() - 1) / 2;
-        customer = results[index];
-    }
-    assert(customer == true);
-    int cId = (*customer)["c_id"].get_int32();
-    string cData((*customer)["c_data"].get_string());
-    string cCredit((*customer)["c_credit"].get_string());
-    if (cCredit == BAD_CREDIT) {
-        string newData = fmt::format("{:d} {:d} {:d} {:d} {:d} {:f}",
-                                     pparams.cId, pparams.cDId, pparams.cWId,
-                                     pparams.dId, pparams.wId, pparams.hAmount);
-        cData = newData + "|" + cData;
-        if (cData.length() > MAX_C_DATA) {
-            cData.resize(MAX_C_DATA);
-        }
-    }
-
-#ifdef PRINT_TRACE
-    cout << "cuq" << endl;
-#endif
-    auto colHistory = conn->database("bench").collection("history");
-    auto c_update = colCustomer.update_one(session, MDV("c_id", cId, "c_w_id", pparams.cWId, "c_d_id", pparams.cId), MDV("$set", MDV("c_data", cData), "$inc", MDV("c_balance", -pparams.hAmount, "c_ytd_payment", pparams.hAmount, "c_payment_cnt", 1)));
-    assert(c_update == true);
-    assert(c_update.value().modified_count() == 1);
-
-    string h_data =
-        fmt::format("{:s}    {:s}", (*warehouse)["w_name"].get_string(),
-                    (*district)["d_name"].get_string());
-
-#ifdef PRINT_TRACE
-    cout << "hi" << endl;
-#endif
-    auto insertResult = colHistory.insert_one(session, MDV(
-        "h_c_id", cId,
-        "h_c_w_id", pparams.cWId,
-        "h_w_id", pparams.wId,
-        "h_c_d_id", pparams.cDId,
-        "h_d_id", pparams.dId,
-        "h_amount", pparams.hAmount,
-        "h_data", h_data,
-        "h_date", bsoncxx::types::b_date{pparams.hDate},
-    ));
-    assert(insertResult == true);
-    assert(insertResult.value().result().inserted_count() == 1);
-    session.commit_transaction();
+    session.with_transaction(callback);
+    retries += tries-1;
     return true;
 }
 
 static bool doStockLevel(benchmark::State &state, ScaleParameters &params,
-                  mongocxx::pool::entry& conn) {
+                  mongocxx::pool::entry& conn, int &retries) {
 #ifdef PRINT_TRACE
     cout << "stockLevel" << endl;
 #endif
     StockLevelParams sparams;
     randomHelper.generateStockLevelParams(params, sparams);
+    int tries = 0;
+    mongocxx::client_session::with_transaction_cb callback =
+        [&](mongocxx::client_session *session) {
+            tries++;
+            string distQuery =
+                fmt::format("SELECT d_next_o_id from bench.district "
+                            "WHERE d_id = {:d} AND d_w_id = {:d} LIMIT 1;",
+                            sparams.dId, sparams.wId);
+
+#ifdef PRINT_TRACE
+            cout << "dq" << endl;
+#endif
+            auto colDistrict = conn->database("bench").collection("district");
+            auto queryOptions = mongocxx::options::find();
+            queryOptions.projection(MDV("d_next_o_id", 1, "_id", 0));
+            auto district = colDistrict.find_one(
+                *session, MDV("d_id", sparams.dId, "d_w_id", sparams.wId));
+            assert(district.has_value() == true);
+            int nextOid = (*district)["d_next_o_id"].get_int32();
+
+            auto colOrderLine =
+                conn->database("bench").collection("order_line");
+            auto orderLinesQuery = mongocxx::options::find();
+            orderLinesQuery.projection(MDV("ol_o_id", 1, "_id", 0));
+            orderLinesQuery.batch_size(1000);
+            auto orderLinesResult = colOrderLine.find(
+                *session,
+                MDV("ol_w_id", sparams.wId, "ol_d_id", sparams.dId, "ol_o_id",
+                    MDV("$lt", nextOid, "$gte", nextOid - 20)),
+                orderLinesQuery);
+
+            unordered_set<int32_t> ols;
+            for (auto &&ol : orderLinesResult) {
+                ols.insert(ol["ol_o_id"].get_int32());
+            }
+            assert(ols.size() > 0);
+            bsoncxx::builder::basic::array builder{};
+            for (auto it = ols.begin(); it != ols.end();) {
+                builder.append(std::move(ols.extract(it++).value()));
+            }
+
+#ifdef PRINT_TRACE
+            cout << "sq" << endl;
+#endif
+            auto colStock = conn->database("bench").collection("stock");
+            auto count = colStock.count_documents(
+                *session, MDV("s_w_id", sparams.wId, "s_i_id",
+                              MDV("$in", builder.extract()), "s_quantity",
+                              MDV("$lt", sparams.threshold)));
+        };
     auto session = conn->start_session();
-    session.start_transaction();
+    session.with_transaction(callback);
+    retries += tries-1;
 
-    string distQuery =
-        fmt::format("SELECT d_next_o_id from bench.district "
-                    "WHERE d_id = {:d} AND d_w_id = {:d} LIMIT 1;",
-                    sparams.dId, sparams.wId);
-
-#ifdef PRINT_TRACE
-    cout << "dq" << endl;
-#endif
-    auto colDistrict = conn->database("bench").collection("district");
-    auto queryOptions = mongocxx::options::find();
-    queryOptions.projection(MDV("d_next_o_id", 1, "_id", 0));
-    auto district = colDistrict.find_one(session, MDV("d_id", sparams.dId, "d_w_id", sparams.wId));
-    assert(district == true);
-    int nextOid = (*district)["d_next_o_id"].get_int32();
-
-    auto colOrderLine = conn->database("bench").collection("order_line");
-    auto orderLinesQuery = mongocxx::options::find();
-    orderLinesQuery.projection(MDV("ol_o_id", 1, "_id", 0));
-    orderLinesQuery.batch_size(1000);
-    auto orderLinesResult = colOrderLine.find(session, MDV("ol_w_id", sparams.wId, "ol_d_id", sparams.dId, "ol_o_id", MDV("$lt", nextOid, "$gte", nextOid-20)), orderLinesQuery);
-
-    unordered_set<int32_t> ols;
-    for(auto&& ol: orderLinesResult) {
-        ols.insert(ol["ol_o_id"].get_int32());
-    }
-    assert(ols.size() > 0);
-bsoncxx::builder::basic::array builder{};
-    for (auto it = ols.begin(); it != ols.end();) {
-        builder.append(std::move(ols.extract(it++).value()));
-    }
-
-#ifdef PRINT_TRACE
-    cout << "sq" << endl;
-#endif
-    auto colStock = conn->database("bench").collection("stock");
-    auto count = colStock.count_documents(session, MDV("s_w_id", sparams.wId, "s_i_id", MDV("$in", builder.extract()), "s_quantity", MDV("$lt", sparams.threshold)));
-    session.commit_transaction();
     return true;
 }
 
 static bool doNewOrder(benchmark::State &state, ScaleParameters &params,
-                mongocxx::pool::entry& conn, int &numFails) {
+                mongocxx::pool::entry& conn, int &numFails, int &retries) {
 #ifdef PRINT_TRACE
     cout << "newOrder" << endl;
 #endif
     NewOrderParams noparams;
     randomHelper.generateNewOrderParams(params, noparams);
-    auto session = conn->start_session();
-    session.start_transaction();
-
+    int tries = 0;
+    mongocxx::client_session::with_transaction_cb callback =
+        [&](mongocxx::client_session *session) {
+            tries++;
 #ifdef PRINT_TRACE
-    cout << "du" << endl;
+            cout << "du" << endl;
 #endif
-    auto colDistrict = conn->database("bench").collection("district");
-    auto optionsDist = mongocxx::options::find_one_and_update();
-    optionsDist.projection(MDV("d_id", 1, "d_w_id", 1, "d_tax", 1, "d_next_o_id", 1, "_id", 0));
-    auto district = colDistrict.find_one_and_update(session, MDV("d_id", noparams.dId, "d_w_id", noparams.wId), MDV("$inc", MDV("d_next_o_id", 1)), optionsDist);
-    assert(district == true);
+            auto colDistrict = conn->database("bench").collection("district");
+            auto optionsDist = mongocxx::options::find_one_and_update();
+            optionsDist.projection(MDV("d_id", 1, "d_w_id", 1, "d_tax", 1,
+                                       "d_next_o_id", 1, "_id", 0));
+            auto district = colDistrict.find_one_and_update(
+                *session, MDV("d_id", noparams.dId, "d_w_id", noparams.wId),
+                MDV("$inc", MDV("d_next_o_id", 1)), optionsDist);
+            assert(district.has_value() == true);
 
-    double dTax = (*district)["d_tax"].get_double();
-    int dNextOId = (*district)["d_next_o_id"].get_int32();
+            double dTax = (*district)["d_tax"].get_double();
+            int dNextOId = (*district)["d_next_o_id"].get_int32();
 
-    // TODO sharding?
+        // TODO sharding?
 #ifdef PRINT_TRACE
-    cout << "iq" << endl;
+            cout << "iq" << endl;
 #endif
-    auto colItem = conn->database("bench").collection("item");
-    auto optionsItem = mongocxx::options::find();
-    optionsItem.projection(MDV("i_id", 1, "i_price", 1, "i_name", 1, "i_data", 1, "_id", 0));
-    bsoncxx::builder::basic::array iids{};
-    for(auto iId : noparams.iIds) {
-        iids.append(iId);
-    }
-    auto itemsResults = colItem.find(session, MDV("i_id", MDV("$in", iids.view())), optionsItem);
-    std::vector<bsoncxx::document::value> items;
-    for(auto&& item: itemsResults) {
-        items.push_back(MDV2(item));
-    }
-    if (items.size() != noparams.iIds.size()) {
-        numFails++;
-        session.abort_transaction();
-        return false;
-    }
-    // Get id index
-    auto getiIdIndex = [&](int iid) {
-        int index = find(noparams.iIds.begin(), noparams.iIds.end(), iid) -
+            auto colItem = conn->database("bench").collection("item");
+            auto optionsItem = mongocxx::options::find();
+            optionsItem.projection(MDV("i_id", 1, "i_price", 1, "i_name", 1,
+                                       "i_data", 1, "_id", 0));
+            bsoncxx::builder::basic::array iids{};
+            for (auto iId : noparams.iIds) {
+                iids.append(iId);
+            }
+            auto itemsResults = colItem.find(
+                *session, MDV("i_id", MDV("$in", iids.view())), optionsItem);
+            std::vector<bsoncxx::document::value> items;
+            for (auto &&item : itemsResults) {
+                items.push_back(MDV2(item));
+            }
+            if (items.size() != noparams.iIds.size()) {
+                numFails++;
+                session->abort_transaction();
+                return false;
+            }
+            // Get id index
+            auto getiIdIndex = [&](int iid) {
+                int index =
+                    find(noparams.iIds.begin(), noparams.iIds.end(), iid) -
                     noparams.iIds.begin();
-        assert(index >= 0);
-        return index;
-    };
+                assert(index >= 0);
+                return index;
+            };
 
-    // wId lookup
-    auto getwId = [&](int iid) {
-        int index = getiIdIndex(iid);
-        return noparams.iIWds[index];
-    };
+            // wId lookup
+            auto getwId = [&](int iid) {
+                int index = getiIdIndex(iid);
+                return noparams.iIWds[index];
+            };
 
-    // get Qty index
-    auto getQty = [&](int iid) {
-        int index = getiIdIndex(iid);
-        return noparams.iQtys[index];
-    };
+            // get Qty index
+            auto getQty = [&](int iid) {
+                int index = getiIdIndex(iid);
+                return noparams.iQtys[index];
+            };
 
-    auto getItem = [&](int iid) {
-        return *find_if(items.begin(), items.end(),
-                        [=](bsoncxx::document::value& row) {
-                            return row["i_id"].get_int32() == iid;
-                        });
-    };
-
-#ifdef PRINT_TRACE
-    cout << "whq" << endl;
-#endif
-    auto colWarehouse = conn->database("bench").collection("warehouse");
-    auto warehouseQuery = mongocxx::options::find();
-    warehouseQuery.projection(MDV("w_tax", 1, "_id", 0));
-    auto warehouse = colWarehouse.find_one(session, MDV("w_id", noparams.wId)) ;
-    assert(warehouse == true);
-    double wTax = (*warehouse)["w_tax"].get_double();
+            auto getItem = [&](int iid) {
+                return *find_if(items.begin(), items.end(),
+                                [=](bsoncxx::document::value &row) {
+                                    return row["i_id"].get_int32() == iid;
+                                });
+            };
 
 #ifdef PRINT_TRACE
-    cout << "cq" << endl;
+            cout << "whq" << endl;
 #endif
-    auto colCustomer = conn->database("bench").collection("customer");
-    auto customerQuery = mongocxx::options::find();
-    customerQuery.projection(MDV("c_discount", 1, "c_last", 1, "c_credit", 1, "_id", 0));
-    auto customer = colCustomer.find_one(session, MDV("c_w_id", noparams.wId, "c_d_id", noparams.dId, "c_id", noparams.cId), customerQuery);
-    assert(customer == true);
-    double cDiscount = (*customer)["c_discount"].get_double();
-
-    int olCnt = noparams.iIds.size();
-    int oCarrierId = NULL_CARRIER_ID;
-
-    // All from same warehouse...
-    bool allLocal = all_of(noparams.iIWds.begin(), noparams.iIWds.end(),
-                           [=](int i) { return i == noparams.iIWds[0]; });
-
-    auto colStock = conn->database("bench").collection("stock");
-    std::vector<bsoncxx::document::value> stock;
-    if (allLocal) {
-#ifdef PRINT_TRACE
-        cout << "sal" << endl;
-#endif
-        auto stockQuery = mongocxx::options::find();
-        stockQuery.projection(MDV("s_i_id", 1, "s_w_id", 1, "s_quantity", 1, "s_data", 1, "s_ytd", 1, "s_order_cnt", 1, "s_remote_cnt", 1, fmt::format("s_dist_{:02d}", noparams.dId), 1, "_id", 0));
-        auto stockResult = colStock.find(session, MDV("s_w_id", noparams.wId, "s_i_id", MDV("$in", iids.view())), stockQuery);
-        for(auto&& stck: stockResult) {
-            stock.push_back(MDV2(stck));
-        }
-        assert(stock.size() == olCnt);
-    } else {
-        bsoncxx::builder::basic::array filters{};
-        for (int i = 0; i < noparams.iIds.size(); ++i) {
-            filters.append(MDV("s_w_id", getwId(noparams.iIds[i]), "s_i_id", noparams.iIds[i]));
-        }
+            auto colWarehouse = conn->database("bench").collection("warehouse");
+            auto warehouseQuery = mongocxx::options::find();
+            warehouseQuery.projection(MDV("w_tax", 1, "_id", 0));
+            auto warehouse =
+                colWarehouse.find_one(*session, MDV("w_id", noparams.wId));
+            assert(warehouse.has_value() == true);
+            double wTax = (*warehouse)["w_tax"].get_double();
 
 #ifdef PRINT_TRACE
-        cout << "sor" << endl;
+            cout << "cq" << endl;
 #endif
-        auto stockQuery = mongocxx::options::find();
-        stockQuery.projection(MDV("s_i_id", 1, "s_w_id", 1, "s_quantity", 1, "s_data", 1, "s_ytd", 1, "s_order_cnt", 1, "s_remote_cnt", 1, fmt::format("s_dist_{:02d}", noparams.dId), 1, "_id", 0));
-        auto stockResult = colStock.find(session, MDV("$or", filters.view()), stockQuery);
-        for(auto&& stck: stockResult) {
-            stock.push_back(MDV2(stck));
-        }
-        assert(stock.size() == olCnt);
-    }
+            auto colCustomer = conn->database("bench").collection("customer");
+            auto customerQuery = mongocxx::options::find();
+            customerQuery.projection(
+                MDV("c_discount", 1, "c_last", 1, "c_credit", 1, "_id", 0));
+            auto customer =
+                colCustomer.find_one(*session,
+                                     MDV("c_w_id", noparams.wId, "c_d_id",
+                                         noparams.dId, "c_id", noparams.cId),
+                                     customerQuery);
+            assert(customer.has_value() == true);
+            double cDiscount = (*customer)["c_discount"].get_double();
 
-    auto getStock = [&](int iid) {
-        return *find_if(stock.begin(), stock.end(),
-                        [=](bsoncxx::document::value& row) {
-                            return row["s_i_id"].get_int32() == iid;
-                        });
-    };
+            int olCnt = noparams.iIds.size();
+            int oCarrierId = NULL_CARRIER_ID;
+
+            // All from same warehouse...
+            bool allLocal =
+                all_of(noparams.iIWds.begin(), noparams.iIWds.end(),
+                       [=](int i) { return i == noparams.iIWds[0]; });
+
+            auto colStock = conn->database("bench").collection("stock");
+            std::vector<bsoncxx::document::value> stock;
+            if (allLocal) {
+#ifdef PRINT_TRACE
+                cout << "sal" << endl;
+#endif
+                auto stockQuery = mongocxx::options::find();
+                stockQuery.projection(MDV(
+                    "s_i_id", 1, "s_w_id", 1, "s_quantity", 1, "s_data", 1,
+                    "s_ytd", 1, "s_order_cnt", 1, "s_remote_cnt", 1,
+                    fmt::format("s_dist_{:02d}", noparams.dId), 1, "_id", 0));
+                auto stockResult =
+                    colStock.find(*session,
+                                  MDV("s_w_id", noparams.wId, "s_i_id",
+                                      MDV("$in", iids.view())),
+                                  stockQuery);
+                for (auto &&stck : stockResult) {
+                    stock.push_back(MDV2(stck));
+                }
+                assert(stock.size() == olCnt);
+            } else {
+                bsoncxx::builder::basic::array filters{};
+                for (int i = 0; i < noparams.iIds.size(); ++i) {
+                    filters.append(MDV("s_w_id", getwId(noparams.iIds[i]),
+                                       "s_i_id", noparams.iIds[i]));
+                }
 
 #ifdef PRINT_TRACE
-    cout << "io" << endl;
+                cout << "sor" << endl;
 #endif
-    auto colOrder = conn->database("bench").collection("order");
-    auto iOResult = colOrder.insert_one(session, MDV(
-        "o_id", dNextOId,
-        "o_w_id", noparams.wId,
-        "o_d_id", noparams.dId,
-        "o_c_id", noparams.cId,
-        "o_carrier_id", oCarrierId,
-        "o_ol_cnt", olCnt,
-        "o_all_local", allLocal,
-        "o_entry_d", bsoncxx::types::b_date{noparams.oEntryDate},
-    ));
-    assert(iOResult == true);
-    assert(iOResult.value().result().inserted_count() == 1);
+                auto stockQuery = mongocxx::options::find();
+                stockQuery.projection(MDV(
+                    "s_i_id", 1, "s_w_id", 1, "s_quantity", 1, "s_data", 1,
+                    "s_ytd", 1, "s_order_cnt", 1, "s_remote_cnt", 1,
+                    fmt::format("s_dist_{:02d}", noparams.dId), 1, "_id", 0));
+                auto stockResult = colStock.find(
+                    *session, MDV("$or", filters.view()), stockQuery);
+                for (auto &&stck : stockResult) {
+                    stock.push_back(MDV2(stck));
+                }
+                assert(stock.size() == olCnt);
+            }
 
-    string insertQuery = fmt::format(
-        "INSERT INTO bench.new_order VALUES\r\n ({:d}, {:d}, {:d});",
-        noparams.wId, dNextOId, noparams.dId);
+            auto getStock = [&](int iid) {
+                return *find_if(stock.begin(), stock.end(),
+                                [=](bsoncxx::document::value &row) {
+                                    return row["s_i_id"].get_int32() == iid;
+                                });
+            };
 
 #ifdef PRINT_TRACE
-    cout << "noi" << endl;
+            cout << "io" << endl;
 #endif
-    auto colNewOrder = conn->database("bench").collection("new_order");
-    auto noResult = colNewOrder.insert_one(session, MDV(
-        "no_o_id", dNextOId,
-        "no_w_id", noparams.wId,
-        "no_d_id", noparams.dId,
-    ));
-    assert(noResult == true);
-    assert(noResult.value().result().inserted_count() == 1);
-
-    vector<tuple<string, int, string, double, double>> itemData;
-    itemData.reserve(olCnt);
-    double total = 0;
-    auto colOrderLine = conn->database("bench").collection("order_line");
-    auto stockBulk = colStock.create_bulk_write(session);
-    auto newOrderBulk = colOrderLine.create_bulk_write(session);
-    for (int i = 0; i < olCnt; ++i) {
-        int olNumber = i + 1;
-        int olIId = noparams.iIds[i];
-        int iIdIdx = getiIdIndex(olIId);
-        int olSupplyWId = noparams.iIWds[i];
-        int olQuantity = noparams.iQtys[i];
-
-        auto item = getItem(olIId);
-        auto stockitem = getStock(olIId);
-
-        int sQuantity = stockitem["s_ytd"].get_int32();
-        int sYtd = stockitem["s_ytd"].get_int32() + olQuantity;
-
-        if (sQuantity >= olQuantity + 10) {
-            sQuantity = sQuantity - olQuantity;
-        } else {
-            sQuantity = sQuantity + 91 - olQuantity;
-        }
-
-        int sOrderCnt = stockitem["s_order_cnt"].get_int32() + 1;
-        int sRemoteCnt = stockitem["s_remote_cnt"].get_int32();
-
-        if (olSupplyWId != noparams.wId) {
-            sRemoteCnt++;
-        }
+            auto colOrder = conn->database("bench").collection("order");
+            auto iOResult = colOrder.insert_one(
+                *session, MDV("o_id", dNextOId, "o_w_id", noparams.wId,
+                              "o_d_id", noparams.dId, "o_c_id", noparams.cId,
+                              "o_carrier_id", oCarrierId, "o_ol_cnt", olCnt,
+                              "o_all_local", allLocal, "o_entry_d",
+                              bsoncxx::types::b_date{noparams.oEntryDate}, ));
+            assert(iOResult.has_value() == true);
+            assert(iOResult.value().result().inserted_count() == 1);
 
 #ifdef PRINT_TRACE
-        cout << "suq" << endl;
+            cout << "noi" << endl;
 #endif
-        mongocxx::model::update_one updater(MDV("s_i_id", olIId, "s_w_id", olSupplyWId), MDV("$set", MDV(
-            "s_quantity", sQuantity,
-            "s_ytd", sYtd,
-            "s_order_cnt", sOrderCnt,
-            "s_remote_cnt", sRemoteCnt,
-        )));
-        stockBulk.append(updater);
+            auto colNewOrder = conn->database("bench").collection("new_order");
+            auto noResult = colNewOrder.insert_one(
+                *session, MDV("no_o_id", dNextOId, "no_w_id", noparams.wId,
+                              "no_d_id", noparams.dId, ));
+            assert(noResult.has_value() == true);
+            assert(noResult.value().result().inserted_count() == 1);
 
-        double olAmount = olQuantity * item["i_price"].get_double();
-        total += olAmount;
+            vector<tuple<string, int, string, double, double>> itemData;
+            itemData.reserve(olCnt);
+            double total = 0;
+            auto colOrderLine =
+                conn->database("bench").collection("order_line");
+            auto stockBulk = colStock.create_bulk_write(*session);
+            auto newOrderBulk = colOrderLine.create_bulk_write(*session);
+            for (int i = 0; i < olCnt; ++i) {
+                int olNumber = i + 1;
+                int olIId = noparams.iIds[i];
+                int iIdIdx = getiIdIndex(olIId);
+                int olSupplyWId = noparams.iIWds[i];
+                int olQuantity = noparams.iQtys[i];
+
+                auto item = getItem(olIId);
+                auto stockitem = getStock(olIId);
+
+                int sQuantity = stockitem["s_ytd"].get_int32();
+                int sYtd = stockitem["s_ytd"].get_int32() + olQuantity;
+
+                if (sQuantity >= olQuantity + 10) {
+                    sQuantity = sQuantity - olQuantity;
+                } else {
+                    sQuantity = sQuantity + 91 - olQuantity;
+                }
+
+                int sOrderCnt = stockitem["s_order_cnt"].get_int32() + 1;
+                int sRemoteCnt = stockitem["s_remote_cnt"].get_int32();
+
+                if (olSupplyWId != noparams.wId) {
+                    sRemoteCnt++;
+                }
 
 #ifdef PRINT_TRACE
-        cout << "iol" << endl;
+                cout << "suq" << endl;
 #endif
-        mongocxx::model::insert_one inserter(MDV(
-            "ol_o_id", dNextOId,
-            "ol_w_id", noparams.wId,
-            "ol_d_id", noparams.dId,
-            "ol_number", olNumber,
-            "ol_i_id", olIId,
-            "ol_supply_w_id", olSupplyWId,
-            "ol_quantity", olQuantity,
-            "ol_amount", olAmount,
-            "ol_dist_info", stockitem[fmt::format("s_dist_{:02d}", noparams.dId)].get_string(),
-            "ol_delivery_d",  bsoncxx::types::b_null(),
-        ));
-        newOrderBulk.append(inserter);
+                mongocxx::model::update_one updater(
+                    MDV("s_i_id", olIId, "s_w_id", olSupplyWId),
+                    MDV("$set", MDV("s_quantity", sQuantity, "s_ytd", sYtd,
+                                    "s_order_cnt", sOrderCnt, "s_remote_cnt",
+                                    sRemoteCnt, )));
+                stockBulk.append(updater);
 
-        string iData(item["i_data"].get_string());
-        string sData(stockitem["s_data"].get_string());
-        string brandGeneric = "G";
-        if (iData.find(ORIGINAL_STRING) != -1 &&
-            sData.find(ORIGINAL_STRING) != -1) {
-            brandGeneric = "B";
-        }
-        itemData.push_back(make_tuple(string(item["i_name"].get_string()), sQuantity,
-                                      brandGeneric,
-                                      item["i_price"].get_double(), olAmount));
-    } 
-    auto stockResult = stockBulk.execute();
-    assert(stockResult == true);
-    assert(stockResult.value().matched_count() == olCnt);
-    auto olResult = newOrderBulk.execute();
-    assert(olResult == true);
-    assert(olResult.value().inserted_count() == olCnt);
-    total *= (1 - cDiscount) * (1 + wTax + dTax);
+                double olAmount = olQuantity * item["i_price"].get_double();
+                total += olAmount;
 
-    session.commit_transaction();
+#ifdef PRINT_TRACE
+                cout << "iol" << endl;
+#endif
+                mongocxx::model::insert_one inserter(
+                    MDV("ol_o_id", dNextOId, "ol_w_id", noparams.wId, "ol_d_id",
+                        noparams.dId, "ol_number", olNumber, "ol_i_id", olIId,
+                        "ol_supply_w_id", olSupplyWId, "ol_quantity",
+                        olQuantity, "ol_amount", olAmount, "ol_dist_info",
+                        stockitem[fmt::format("s_dist_{:02d}", noparams.dId)]
+                            .get_string(),
+                        "ol_delivery_d", bsoncxx::types::b_null(), ));
+                newOrderBulk.append(inserter);
+
+                string iData(item["i_data"].get_string());
+                string sData(stockitem["s_data"].get_string());
+                string brandGeneric = "G";
+                if (iData.find(ORIGINAL_STRING) != -1 &&
+                    sData.find(ORIGINAL_STRING) != -1) {
+                    brandGeneric = "B";
+                }
+                itemData.push_back(make_tuple(
+                    string(item["i_name"].get_string()), sQuantity,
+                    brandGeneric, item["i_price"].get_double(), olAmount));
+            }
+            auto stockResult = stockBulk.execute();
+            assert(stockResult.has_value() == true);
+            assert(stockResult.value().matched_count() == olCnt);
+            auto olResult = newOrderBulk.execute();
+            assert(olResult.has_value() == true);
+            assert(olResult.value().inserted_count() == olCnt);
+            total *= (1 - cDiscount) * (1 + wTax + dTax);
+            return true;
+        };
+    auto session = conn->start_session();
+    session.with_transaction(callback);
+    retries += tries -1;
     return true;
 }
 
@@ -1199,6 +1293,7 @@ static void BM_MONGO_TPCC_OLD(benchmark::State &state) {
     int numStockLevels = 0;
     int numDeadlocks = 0;
     int numOtherErrors = 0;
+    int retries = 0;
     for (auto _ : state) {
         // auto start = std::chrono::high_resolution_clock::now();
         tpcc::TransactionType type = randomHelper.nextTransactionType();
@@ -1208,32 +1303,38 @@ static void BM_MONGO_TPCC_OLD(benchmark::State &state) {
         bool result = false;
         switch (type) {
         case tpcc::TransactionType::Delivery:
-            result = doDeliveryN(state, params, conn);
+            result = doDeliveryN(state, params, conn, retries);
             numDeliveries++;
             break;
         case tpcc::TransactionType::OrderStatus:
-            result = doOrderStatus(state, params, conn);
+            result = doOrderStatus(state, params, conn, retries);
             numOrderStatuses++;
             break;
         case tpcc::TransactionType::Payment:
-            result = doPayment(state, params, conn);
+            result = doPayment(state, params, conn, retries);
             numPayments++;
             break;
         case tpcc::TransactionType::StockLevel:
-            result = doStockLevel(state, params, conn);
+            result = doStockLevel(state, params, conn, retries);
             numStockLevels++;
             break;
         case tpcc::TransactionType::NewOrder:
-            result = doNewOrder(state, params, conn, numFailedNewOrders);
+            result = doNewOrder(state, params, conn, numFailedNewOrders, retries);
             numNewOrders++;
             break;
         }
+        } catch(mongocxx::operation_exception& e) {
+            if(e.has_error_label("TransientTransactionError")) {
+                cout << this_thread::get_id() << " Operation exception! Transient \r\n" << e.what() << endl;
+            } else if(e.has_error_label("UnknownTransactionCommitResult")) {
+                cout << this_thread::get_id() << " Operation exception! Unknown \r\n" << e.what() << endl;
+            }
         } catch(mongocxx::exception& e) {
-            cout << "mongocxxException!\r\n" << e.what() << endl;
+            cout << this_thread::get_id() << " mongocxxException!\r\n" << e.what() << endl;
         } catch(std::exception& e) {
-            cout << "std exception!\r\n" << e.what() << endl;
+            cout << this_thread::get_id() << " std exception!\r\n" << e.what() << endl;
         } catch(...) {
-            cout << "Unknown exception!\r\n" << endl;
+            cout << this_thread::get_id() << " Unknown exception!\r\n" << endl;
             throw;
         }
         // auto end = std::chrono::high_resolution_clock::now();
@@ -1246,7 +1347,7 @@ static void BM_MONGO_TPCC_OLD(benchmark::State &state) {
     int total = numDeliveries + numNewOrders + numFailedNewOrders +
                 numOrderStatuses + numPayments + numStockLevels;
 
-    state.counters["deadlocks"] = numDeadlocks;
+    state.counters["retries"] = retries;
 
     state.counters["txn"] = total;
     state.counters["txnRate"] =
