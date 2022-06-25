@@ -47,24 +47,7 @@ static void LoadBenchmark(mongocxx::pool::entry& conn,
     auto start = chrono::steady_clock::now();
     {
         auto db = conn->database("bench");
-        auto warehouseC = db.collection("warehouse");
-        warehouseC.drop();
-        auto districtC = db.collection("district");
-        districtC.drop();
-        auto customerC = db.collection("customer");
-        customerC.drop();
-        auto historyC = db.collection("history");
-        historyC.drop();
-        auto neworderC = db.collection("new_order");
-        neworderC.drop();
-        auto orderC = db.collection("order");
-        orderC.drop();
-        auto orderlineC = db.collection("order_line");
-        orderlineC.drop();
-        auto stockC = db.collection("stock");
-        stockC.drop();
-        auto itemC = db.collection("item");
-        itemC.drop();
+        db.drop();
     }
 
     // Use clients to scale loading too
