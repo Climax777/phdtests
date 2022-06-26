@@ -952,7 +952,7 @@ static bool doStockLevel(benchmark::State &state, ScaleParameters &params,
             auto colOrderLine =
                 conn->database("bench").collection("order_line");
             auto orderLinesQuery = mongocxx::options::find();
-            orderLinesQuery.projection(MDV("ol_o_id", 1, "_id", 0));
+            orderLinesQuery.projection(MDV("ol_i_id", 1, "_id", 0));
             orderLinesQuery.batch_size(1000);
             auto orderLinesResult = colOrderLine.find(
                 *session,
@@ -962,7 +962,7 @@ static bool doStockLevel(benchmark::State &state, ScaleParameters &params,
 
             unordered_set<int32_t> ols;
             for (auto &&ol : orderLinesResult) {
-                ols.insert(ol["ol_o_id"].get_int32());
+                ols.insert(ol["ol_i_id"].get_int32());
             }
             assert(ols.size() > 0);
             bsoncxx::builder::basic::array builder{};

@@ -41,7 +41,7 @@ static void LoadBenchmark(mongocxx::pool::entry& conn,
     oldParams = params;
     oldclients = clients;
     cout << endl
-         << "Creating mongodb old TPC-C Tables with " << omp_get_num_procs()
+         << "Creating mongodb modern TPC-C Tables with " << omp_get_num_procs()
          << " threads ..." << endl;
     cout.flush();
     auto start = chrono::steady_clock::now();
@@ -342,6 +342,7 @@ static void LoadBenchmark(mongocxx::pool::entry& conn,
                         "o_ol_cnt", orders[i].oOlCnt,
                         "o_all_local", orders[i].oAllLocal,
                         "o_entry_d", bsoncxx::types::b_date{orders[i].oEntryD},
+                        "o_delivery_d", bsoncxx::types::b_date{orders[i].oDeliveryD},
                         "o_lines", orderLines.extract(),
                     };
                     mongocxx::model::insert_one inserter(MDV(orderInsert));
@@ -520,7 +521,7 @@ static bool doDelivery(benchmark::State &state, ScaleParameters &params,
     options.projection(MDV("o_lines", 1, "o_c_id", 1, "o_id", 1, "o_d_id", 1, "o_w_id", 1, "_id", 0));
     options.sort(MDV("o_id", 1));
     options.return_document(mongocxx::options::return_document::k_after);
-    auto no_result = colOrder.find_one_and_update(session, MDV("o_d_id", dparams.dId, "o_w_id", dparams.wId, "o_new", true), MDV("$set", MDV("new", false, "o_carrier_id", dparams.oCarrierId, "o_delivery_d", bsoncxx::types::b_date{dparams.olDeliveryD})), options);
+    auto no_result = colOrder.find_one_and_update(session, MDV("o_d_id", dparams.dId, "o_w_id", dparams.wId, "o_new", true), MDV("$unset", MDV("o_new", 1),"$set", MDV("o_carrier_id", dparams.oCarrierId, "o_delivery_d", bsoncxx::types::b_date{dparams.olDeliveryD})), options);
     if(no_result.has_value() == false) {
         // No orders for this district. TODO report when >1%
         if (state.counters.count("no_new_orders") == 0)
@@ -545,6 +546,14 @@ static bool doDelivery(benchmark::State &state, ScaleParameters &params,
         total += ol["ol_amount"].get_double();
     }
     assert(count > 0);
+
+    #ifdef PRINT_TRACE
+    cout << "cuq" << endl;
+#endif
+    auto colCustomer = conn->database("bench").collection("customer");
+    auto cust_update_result = colCustomer.update_one(session, MDV("c_d_id", dparams.dId, "c_w_id", dparams.wId, "c_id", cId), MDV("$set", MDV("c_balance", total)));
+    assert(cust_update_result.has_value() == true);
+    assert(cust_update_result.value().modified_count() == 1);
     assert(total > 0);
 
     return true;
@@ -638,8 +647,10 @@ static bool doOrderStatus(benchmark::State &state, ScaleParameters &params,
             auto colOrder = conn->database("bench").collection("order");
             auto findOptions = mongocxx::options::find();
             findOptions.comment("OrderStatusTXNOrders");
-            findOptions.projection(
-                MDV("o_id", 1, "o_carrier_id", 1, "o_entry_d", 1, "o_lines", 1, "_id", 0));
+            findOptions.projection(MDV(
+                "o_id", 1, "o_delivery_d", 1, "o_carrier_id", 1, "o_entry_d", 1,
+                "o_lines.ol_supply_w_id", 1, "o_lines.ol_i_id", 1,
+                "o_lines.ol_quantity", 1, "o_lines.ol_amount", 1, "_id", 0));
             findOptions.sort(MDV("o_id", -1));
             findOptions.limit(1);
             auto theOrders =
@@ -808,50 +819,84 @@ static bool doStockLevel(benchmark::State &state, ScaleParameters &params,
     mongocxx::client_session::with_transaction_cb callback =
         [&](mongocxx::client_session *session) {
             tries++;
-            string distQuery =
-                fmt::format("SELECT d_next_o_id from bench.district "
-                            "WHERE d_id = {:d} AND d_w_id = {:d} LIMIT 1;",
-                            sparams.dId, sparams.wId);
 
 #ifdef PRINT_TRACE
             cout << "dq" << endl;
 #endif
             auto colDistrict = conn->database("bench").collection("district");
-            auto pipeline = mongocxx::pipeline{};
-            pipeline.match(MDV("d_w_id", sparams.wId, "d_id", sparams.dId))
-                .limit(1)
-                .project(MDV(
-                    "_id", 0, "o_id",
-                    MDV("$range", bsoncxx::builder::array{MDV("$subtract", bsoncxx::builder::array{"$d_next_o_id", 20}),
-                                      "$d_next_o_id"})))
-                .unwind("$o_id")
-                .lookup(MDV(
-                    "from", "order", "as", "o", "let", MDV("oid", "$o_id"),
-                    "pipeline",
-                    bsoncxx::builder::array{MDV("$match",
-                            MDV("o_d_id", sparams.dId, "o_w_id", sparams.wId,
-                                "$expr", MDV("$eq", bsoncxx::builder::array{"$o_id", "$$oid"}))),
-                        MDV("$project",
-                            MDV("_id", 0, "i_ids", "$o_lines.ol_i_id"))}))
-                .unwind("$o")
-                .unwind("$o.i_ids")
-                .lookup(
-                    MDV("from", "stock", "as", "o", "let",
-                        MDV("ids", "$o.i_ids"), "pipeline",
-                            bsoncxx::builder::array{MDV("$match",
-                                    MDV("s_w_id", sparams.wId, "s_quantity",
-                                        MDV("$lt", sparams.threshold), "$expr",
-                                        MDV("$eq", bsoncxx::builder::array{"$s_i_id", "$$ids"}))),
-                                MDV("$project", MDV("s_w_id", 1))}))
-                .unwind("$o")
-                .count("c");
-            auto results = colDistrict.aggregate(*session, pipeline);
-            std::vector<int> counts;
-            for(auto&& count: results) {
-                counts.push_back(count["c"].get_int32());
+            auto queryOptions = mongocxx::options::find();
+            queryOptions.projection(MDV("d_next_o_id", 1, "_id", 0));
+            auto district = colDistrict.find_one(
+                *session, MDV("d_id", sparams.dId, "d_w_id", sparams.wId));
+            assert(district.has_value() == true);
+            int nextOid = (*district)["d_next_o_id"].get_int32();
+
+            auto colOrderLine =
+                conn->database("bench").collection("order");
+            auto orderLinesQuery = mongocxx::options::find();
+            orderLinesQuery.projection(MDV("o_lines.ol_i_id", 1, "_id", 0));
+            orderLinesQuery.batch_size(1000);
+            auto orderLinesResult = colOrderLine.find(
+                *session,
+                MDV("o_w_id", sparams.wId, "o_d_id", sparams.dId, "o_o_id",
+                    MDV("$lt", nextOid, "$gte", nextOid - 20)),
+                orderLinesQuery);
+
+            unordered_set<int32_t> ols;
+            for (auto &&ol : orderLinesResult) {
+                for(auto&& oline : ol["o_lines"].get_array().value) {
+                    ols.insert(oline["ol_i_id"].get_int32());
+                }
             }
-            if(counts.size() == 1)
-                auto volatile count = counts[0];
+            assert(ols.size() > 0);
+            bsoncxx::builder::basic::array builder{};
+            for (auto it = ols.begin(); it != ols.end();) {
+                builder.append(std::move(ols.extract(it++).value()));
+            }
+
+#ifdef PRINT_TRACE
+            cout << "sq" << endl;
+#endif
+            auto colStock = conn->database("bench").collection("stock");
+            auto count = colStock.count_documents(
+                *session, MDV("s_w_id", sparams.wId, "s_i_id",
+                              MDV("$in", builder.extract()), "s_quantity",
+                              MDV("$lt", sparams.threshold)));
+
+            // auto colDistrict = conn->database("bench").collection("district");
+            // auto pipeline = mongocxx::pipeline{};
+            // pipeline.match(MDV("d_w_id", sparams.wId, "d_id", sparams.dId))
+            //     .limit(1)
+            //     .project(MDV(
+            //         "_id", 0, "o_id_min", MDV("$subtract", bsoncxx::builder::array{"$d_next_o_id", 20}), "o_id_max", "$d_next_o_id"))
+            //     .lookup(MDV(
+            //         "from", "order", "as", "o", "let", MDV("oidmin", "$o_id_min", "oidmax", "$o_id_max"),
+            //         "pipeline",
+            //         bsoncxx::builder::array{MDV("$match",
+            //                 MDV("o_d_id", sparams.dId, "o_w_id", sparams.wId,
+            //                     "$expr", MDV("$and", bsoncxx::builder::array{MDV("$lt", bsoncxx::builder::array{"$o_id", "$$oidmax"}), MDV("$gte", bsoncxx::builder::array{"$o_id", "$$oidmin"})}))),
+            //             MDV("$project",
+            //                 MDV("_id", 0, "i_ids", "$o_lines.ol_i_id"))}))
+            //     .unwind("$o")
+            //     .unwind("$o.i_ids")
+            //     .lookup(
+            //         MDV("from", "stock", "as", "o", "let",
+            //             MDV("ids", "$o.i_ids"), "pipeline",
+            //                 bsoncxx::builder::array{MDV("$match",
+            //                         MDV("s_w_id", sparams.wId, "s_quantity",
+            //                             MDV("$lt", sparams.threshold), "$expr",
+            //                             MDV("$eq", bsoncxx::builder::array{"$s_i_id", "$$ids"}))),
+            //                     MDV("$project", MDV("s_w_id", 1))}))
+            //     .unwind("$o")
+            //     .count("c");
+            // //cout << bsoncxx::to_json(pipeline.view_array()) << endl;
+            // auto results = colDistrict.aggregate(*session, pipeline);
+            // std::vector<int> counts;
+            // for(auto&& count: results) {
+            //     counts.push_back(count["c"].get_int32());
+            // }
+            // if(counts.size() == 1)
+            //     auto volatile count = counts[0];
         };
     auto session = conn->start_session();
     session.with_transaction(callback);
@@ -1075,7 +1120,6 @@ static bool doNewOrder(benchmark::State &state, ScaleParameters &params,
                         olQuantity, "ol_amount", olAmount, "ol_dist_info",
                         stockitem[fmt::format("s_dist_{:02d}", noparams.dId)]
                             .get_string(),
-                        "ol_delivery_d", bsoncxx::types::b_null(), 
                         );
                 newOrderBulk.append(bsoncxx::types::b_document{ol});
 
